@@ -1,325 +1,68 @@
 "use client";
 
-import React, { useState, useRef } from 'react';
-import { motion, AnimatePresence } from 'motion/react';
-import { 
-  Shield, 
-  ShieldAlert, 
-  ShieldCheck, 
-  AlertTriangle, 
-  Upload, 
-  Search, 
-  Activity, 
-  FileText, 
-  Lock, 
-  ChevronRight, 
-  Loader2, 
-  X,
-  Image as ImageIcon,
-  Info
-} from 'lucide-react';
-import { analyzeThreat, ThreatAnalysisResult } from '../services/threat-engine';
-import { saveScan } from '../services/scan-history';
+import Link from 'next/link';
+import { Shield, ArrowRight, BarChart3, Mail, FileText } from 'lucide-react';
 
-export default function Home() {
-  const [input, setInput] = useState('');
-  const [imageFile, setImageFile] = useState<File | null>(null);
-  const [imagePreview, setImagePreview] = useState<string | null>(null);
-  const [isAnalyzing, setIsAnalyzing] = useState(false);
-  const [result, setResult] = useState<ThreatAnalysisResult | null>(null);
-  const [error, setError] = useState<string | null>(null);
-  
-  const fileInputRef = useRef<HTMLInputElement>(null);
-
-  const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (file) {
-      setImageFile(file);
-      const reader = new FileReader();
-      reader.onloadend = () => {
-        setImagePreview(reader.result as string);
-      };
-      reader.readAsDataURL(file);
-    }
-  };
-
-  const removeImage = () => {
-    setImageFile(null);
-    setImagePreview(null);
-    if (fileInputRef.current) {
-      fileInputRef.current.value = '';
-    }
-  };
-
-  const handleAnalyze = async () => {
-    if (!input.trim() && !imageFile) return;
-    
-    setIsAnalyzing(true);
-    setError(null);
-    setResult(null);
-
-    try {
-      let base64Data: string | undefined;
-      let mimeType: string | undefined;
-
-      if (imageFile) {
-        base64Data = imagePreview?.split(',')[1];
-        mimeType = imageFile.type;
-      }
-
-      const analysis = await analyzeThreat(input, base64Data, mimeType);
-      setResult(analysis);
-      saveScan(input, !!imageFile, analysis);
-    } catch (err) {
-      console.error(err);
-      setError(err instanceof Error ? err.message : 'An error occurred during analysis.');
-    } finally {
-      setIsAnalyzing(false);
-    }
-  };
-
-  const getRiskColor = (level: string) => {
-    switch (level) {
-      case 'Safe': return 'text-[var(--color-safe)]';
-      case 'Low': return 'text-blue-400';
-      case 'Medium': return 'text-[var(--color-warning)]';
-      case 'High': return 'text-orange-500';
-      case 'Critical': return 'text-[var(--color-danger)]';
-      default: return 'text-gray-400';
-    }
-  };
-
-  const getRiskBg = (level: string) => {
-    switch (level) {
-      case 'Safe': return 'bg-[var(--color-safe)]/10 border-[var(--color-safe)]/30';
-      case 'Low': return 'bg-blue-400/10 border-blue-400/30';
-      case 'Medium': return 'bg-[var(--color-warning)]/10 border-[var(--color-warning)]/30';
-      case 'High': return 'bg-orange-500/10 border-orange-500/30';
-      case 'Critical': return 'bg-[var(--color-danger)]/10 border-[var(--color-danger)]/30';
-      default: return 'bg-gray-400/10 border-gray-400/30';
-    }
-  };
-
-  const getRiskIcon = (level: string) => {
-    switch (level) {
-      case 'Safe': return <ShieldCheck className="w-8 h-8 text-[var(--color-safe)]" />;
-      case 'Critical':
-      case 'High': return <ShieldAlert className="w-8 h-8 text-[var(--color-danger)]" />;
-      default: return <AlertTriangle className="w-8 h-8 text-[var(--color-warning)]" />;
-    }
-  };
-
+export default function LandingPage() {
   return (
-    <main className="flex-1 flex flex-col h-full overflow-hidden relative">
-        {/* Mobile Header */}
-        <header className="md:hidden px-4 py-3 bg-white/60 backdrop-blur-md border-b border-slate-200 flex items-center gap-3 z-10 sticky top-0">
-          <div className="w-8 h-8 rounded-xl bg-white border border-slate-200 shadow-sm flex items-center justify-center">
-            <Shield className="w-4 h-4 text-[var(--color-primary)]" />
-          </div>
-          <h1 className="text-lg font-bold text-slate-800">Aegis<span className="text-[var(--color-primary)]">AI</span></h1>
-        </header>
+    <main className="relative min-h-screen overflow-hidden bg-[var(--color-bg-base)] text-slate-900">
+      <div className="absolute inset-0 pointer-events-none">
+        <div className="absolute -top-24 -left-16 h-72 w-72 rounded-full bg-sky-200/45 blur-3xl" />
+        <div className="absolute top-1/2 -translate-y-1/2 right-0 h-80 w-80 rounded-full bg-cyan-200/40 blur-3xl" />
+      </div>
 
-        <div className="flex-1 overflow-y-auto p-4 md:p-8 z-0">
-          <div className="max-w-4xl mx-auto space-y-6 flex flex-col items-center">
-            
-            {/* Header Section */}
-            <header className="flex flex-col items-center text-center mt-4 md:mt-12 mb-4 space-y-3">
-              <div className="w-16 h-16 bg-white shadow-sm border border-slate-200/60 rounded-3xl flex items-center justify-center mb-1">
-                <Shield className="w-8 h-8 text-[var(--color-primary)]" />
-              </div>
-              <h2 className="text-3xl md:text-4xl font-bold text-slate-800 tracking-tight">
-                Hey, I'm AegisAI.
-              </h2>
-              <h3 className="text-lg md:text-xl text-slate-500 font-medium max-w-lg">
-                Upload media or paste context below to begin the forensic analysis.
-              </h3>
-            </header>
-
-            {/* Input Section */}
-            <section className="bg-white rounded-[2.5rem] p-4 overflow-hidden shadow-[0_8px_30px_rgb(0,0,0,0.04)] border border-white/50 w-full max-w-3xl">
-              <div className="flex flex-col gap-2">
-                <textarea
-                  value={input}
-                  onChange={(e) => setInput(e.target.value)}
-                  placeholder="How can I help you today?"
-                  className="w-full h-24 bg-transparent border-none resize-none focus:ring-0 text-slate-700 placeholder-slate-400 text-base p-2 px-3 outline-none"
-                />
-                
-                {/* Image/Media Preview */}
-                <AnimatePresence>
-                  {imagePreview && (
-                    <motion.div 
-                      initial={{ opacity: 0, height: 0 }}
-                      animate={{ opacity: 1, height: 'auto' }}
-                      exit={{ opacity: 0, height: 0 }}
-                      className="relative inline-block w-fit px-3"
-                    >
-                      {imageFile?.type.startsWith('video') ? (
-                        <video src={imagePreview} className="h-40 rounded-xl border border-slate-200 shadow-sm" controls />
-                      ) : imageFile?.type.startsWith('audio') ? (
-                        <audio src={imagePreview} className="w-full max-w-md rounded-xl border border-slate-200 shadow-sm p-2 bg-slate-50" controls />
-                      ) : (
-                        <img src={imagePreview} alt="Upload preview" className="h-24 rounded-xl border border-slate-200 shadow-sm object-cover" />
-                      )}
-                      <button 
-                        onClick={removeImage}
-                        className="absolute -top-2 -right-2 bg-white text-slate-500 p-1 rounded-full border border-slate-200 shadow-sm hover:text-red-500 transition-colors z-20"
-                      >
-                        <X className="w-3.5 h-3.5" />
-                      </button>
-                    </motion.div>
-                  )}
-                </AnimatePresence>
-
-                <div className="flex justify-between items-center gap-4 pt-2">
-                  <div className="flex items-center gap-2">
-                    <input 
-                      type="file" 
-                      ref={fileInputRef} 
-                      onChange={handleImageUpload} 
-                      accept="image/*,audio/*,video/*" 
-                      className="hidden" 
-                    />
-                    <button 
-                      onClick={() => fileInputRef.current?.click()}
-                      className="flex items-center gap-2 px-3 py-2 rounded-xl text-slate-500 hover:text-slate-700 hover:bg-slate-50 transition-colors text-sm font-medium"
-                      title="Attach file"
-                    >
-                      <Upload className="w-5 h-5" />
-                    </button>
-                  </div>
-                  
-                  <button
-                    onClick={handleAnalyze}
-                    disabled={isAnalyzing || (!input.trim() && !imageFile)}
-                    className="flex items-center justify-center w-10 h-10 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                  >
-                    {isAnalyzing ? (
-                      <Loader2 className="w-5 h-5 animate-spin" />
-                    ) : (
-                      <ChevronRight className="w-5 h-5" />
-                    )}
-                  </button>
-                </div>
-              </div>
-            </section>
-
-            {/* Error Message */}
-            <AnimatePresence>
-              {error && (
-                <motion.div 
-                  initial={{ opacity: 0, y: 10 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  exit={{ opacity: 0, y: -10 }}
-                  className="p-4 rounded-xl bg-red-500/10 border border-red-500/30 flex items-start gap-3 text-red-400"
-                >
-                  <AlertTriangle className="w-5 h-5 shrink-0 mt-0.5" />
-                  <p>{error}</p>
-                </motion.div>
-              )}
-            </AnimatePresence>
-
-            {/* Results Section */}
-            <AnimatePresence>
-              {result && (
-                <motion.div
-                  initial={{ opacity: 0, y: 20 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  className="space-y-6"
-                >
-                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-                    <h3 className="text-xl font-semibold text-slate-800 flex items-center gap-2">
-                      <Activity className="w-5 h-5 text-[var(--color-primary)]" />
-                      Analysis Results
-                    </h3>
-                    <div className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-slate-100 border border-slate-200 text-slate-600 text-xs font-semibold">
-                      <ShieldCheck className="w-3.5 h-3.5 text-[var(--color-primary)]" />
-                      Verified by AI Forensics
-                    </div>
-                  </div>
-                  
-                  <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                    {/* Risk Score Card */}
-                    <div className={`rounded-[2.5rem] p-8 border ${getRiskBg(result.riskLevel)} bg-white shadow-[0_8px_30px_rgb(0,0,0,0.04)] flex flex-col items-center justify-center text-center relative overflow-hidden`}>
-                      {getRiskIcon(result.riskLevel)}
-                      <h4 className="text-sm font-medium text-slate-500 mt-4 uppercase tracking-wider">Risk Level</h4>
-                      <p className={`text-4xl font-bold mt-1 ${getRiskColor(result.riskLevel)}`}>{result.riskLevel}</p>
-                      
-                      <div className="mt-6 w-full bg-slate-100 rounded-full h-2 overflow-hidden">
-                        <motion.div 
-                          initial={{ width: 0 }}
-                          animate={{ width: `${result.confidenceScore}%` }}
-                          transition={{ duration: 1, ease: "easeOut" }}
-                          className={`h-full ${result.riskLevel === 'Safe' ? 'bg-[var(--color-safe)]' : result.riskLevel === 'Low' ? 'bg-blue-400' : result.riskLevel === 'Medium' ? 'bg-[var(--color-warning)]' : result.riskLevel === 'High' ? 'bg-orange-500' : 'bg-[var(--color-danger)]'}`}
-                        />
-                      </div>
-                      <p className="text-xs text-slate-500 mt-2 font-medium">{result.confidenceScore}% Confidence</p>
-                    </div>
-
-                    {/* Threat Type & Explanation */}
-                    <div className="md:col-span-2 bg-white shadow-[0_8px_30px_rgb(0,0,0,0.04)] border border-white/50 rounded-[2.5rem] p-8 flex flex-col">
-                      <div className="flex items-start justify-between mb-4">
-                        <div>
-                          <h4 className="text-sm font-medium text-slate-500 uppercase tracking-wider">Threat Classification</h4>
-                          <p className="text-xl font-semibold text-slate-800 mt-1">{result.threatType}</p>
-                        </div>
-                        <div className="p-2 bg-slate-50 border border-slate-100 rounded-xl">
-                          <Info className="w-5 h-5 text-[var(--color-primary)]" />
-                        </div>
-                      </div>
-                      
-                      <div className="flex-1">
-                        <h4 className="text-sm font-medium text-slate-500 uppercase tracking-wider mb-2">Explainable Reasoning</h4>
-                        <p className="text-slate-600 leading-relaxed text-sm">
-                          {result.explanation}
-                        </p>
-                      </div>
-                    </div>
-                  </div>
-
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6 pb-20">
-                    {/* Indicators of Compromise */}
-                    <div className="bg-white shadow-[0_8px_30px_rgb(0,0,0,0.04)] border border-white/50 rounded-[2.5rem] p-8">
-                      <h4 className="text-sm font-medium text-slate-500 uppercase tracking-wider mb-4 flex items-center gap-2">
-                        <Search className="w-4 h-4" />
-                        Key Indicators
-                      </h4>
-                      <ul className="space-y-3">
-                        {result.indicators.map((indicator, idx) => (
-                          <li key={idx} className="flex items-start gap-3 text-sm text-slate-600">
-                            <ChevronRight className="w-4 h-4 text-[var(--color-primary)] shrink-0 mt-0.5" />
-                            <span>{indicator}</span>
-                          </li>
-                        ))}
-                      </ul>
-                    </div>
-
-                    {/* Recommendations */}
-                    <div className="bg-white shadow-[0_8px_30px_rgb(0,0,0,0.04)] border border-white/50 rounded-[2.5rem] p-8">
-                      <h4 className="text-sm font-medium text-slate-500 uppercase tracking-wider mb-4 flex items-center gap-2">
-                        <ShieldCheck className="w-4 h-4" />
-                        Recommended Actions
-                      </h4>
-                      <ul className="space-y-3">
-                        {result.recommendations.map((rec, idx) => (
-                          <li key={idx} className="flex items-start gap-3 text-sm text-slate-600">
-                            <div className="w-5 h-5 rounded-full bg-[var(--color-accent)]/10 text-[var(--color-accent)] flex items-center justify-center shrink-0 mt-0.5 border border-[var(--color-accent)]/20 text-xs font-bold">
-                              {idx + 1}
-                            </div>
-                            <span>{rec}</span>
-                          </li>
-                        ))}
-                      </ul>
-                    </div>
-                  </div>
-                </motion.div>
-              )}
-            </AnimatePresence>
-
-          </div>
+      <section className="relative z-10 mx-auto flex min-h-screen w-full max-w-6xl flex-col justify-center px-6 py-16 md:px-12">
+        <div className="mb-8 inline-flex w-fit items-center gap-3 rounded-full border border-slate-200 bg-white px-4 py-2 shadow-sm">
+          <Shield className="h-4 w-4 text-[var(--color-primary)]" />
+          <span className="text-xs font-semibold uppercase tracking-wider text-slate-600">AegisAI Threat Portal</span>
         </div>
-        
-        {/* Removing the harsh blob backgrounds since the layout has a mesh */}
+
+        <h1 className="max-w-4xl text-4xl font-bold tracking-tight text-slate-900 md:text-6xl">
+          Detect threats early.
+          <span className="block text-slate-500">Respond faster with AI-driven intelligence.</span>
+        </h1>
+
+        <p className="mt-5 max-w-2xl text-base leading-relaxed text-slate-600 md:text-lg">
+          Monitor phishing risk, scan suspicious content, and review security signals from one operational workspace.
+        </p>
+
+        <div className="mt-8 flex flex-wrap items-center gap-3">
+          <Link
+            href="/dashboard"
+            className="inline-flex items-center gap-2 rounded-xl bg-slate-900 px-6 py-3 text-sm font-semibold text-white shadow-lg shadow-slate-900/20 transition hover:bg-slate-800"
+          >
+            Get Started
+            <ArrowRight className="h-4 w-4" />
+          </Link>
+
+          <Link
+            href="/scanner"
+            className="inline-flex items-center gap-2 rounded-xl border border-slate-300 bg-white px-6 py-3 text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
+          >
+            Open Scanner
+          </Link>
+        </div>
+
+        <div className="mt-12 grid grid-cols-1 gap-4 sm:grid-cols-3">
+          <article className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+            <BarChart3 className="mb-3 h-5 w-5 text-blue-500" />
+            <h2 className="text-sm font-semibold text-slate-900">Operational Dashboard</h2>
+            <p className="mt-1 text-xs leading-relaxed text-slate-500">Track scan trends and risk levels with clear analytics cards.</p>
+          </article>
+
+          <article className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+            <Mail className="mb-3 h-5 w-5 text-amber-500" />
+            <h2 className="text-sm font-semibold text-slate-900">Email Monitoring</h2>
+            <p className="mt-1 text-xs leading-relaxed text-slate-500">Review inbox threats in a fast, Gmail-like triage workflow.</p>
+          </article>
+
+          <article className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+            <FileText className="mb-3 h-5 w-5 text-emerald-500" />
+            <h2 className="text-sm font-semibold text-slate-900">Incident Reports</h2>
+            <p className="mt-1 text-xs leading-relaxed text-slate-500">Inspect findings, explanations, indicators, and recommended actions.</p>
+          </article>
+        </div>
+      </section>
     </main>
   );
 }

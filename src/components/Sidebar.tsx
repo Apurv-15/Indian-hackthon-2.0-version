@@ -2,11 +2,12 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { Shield, Search, Activity, FileText, Lock, LogOut } from 'lucide-react';
+import { Shield, Search, Activity, FileText, Lock, LogOut, Mail } from 'lucide-react';
 
 const navItems = [
-  { href: '/',          label: 'Scanner',   icon: Search },
+  { href: '/scanner',   label: 'Scanner',   icon: Search },
   { href: '/dashboard', label: 'Dashboard', icon: Activity },
+  { href: '/emails',    label: 'Emails',    icon: Mail },
   { href: '/reports',   label: 'Reports',   icon: FileText },
   { href: '/policies',  label: 'Policies',  icon: Lock },
 ];
@@ -30,7 +31,7 @@ export default function Sidebar() {
       {/* Navigation Section */}
       <nav className="flex-1 px-4 py-8 space-y-2">
         {navItems.map(({ href, label, icon: Icon }) => {
-          const isActive = pathname === href;
+          const isActive = pathname === href || pathname.startsWith(`${href}/`);
           return (
             <Link
               key={href}
