@@ -1,0 +1,110 @@
+﻿python.exe : Warning: You are sending unauthenticated requests to the HF Hub. Please 
+set a HF_TOKEN to enable higher rate limits and faster downloads.
+At line:4 char:5
++     & "$python" "$script" > ai_agent/bridge.log 2>&1
++     ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : NotSpecified: (Warning: You ar...ster downloads.:String) 
+    [], RemoteException
+    + FullyQualifiedErrorId : NativeCommandError
+ 
+Initializing Threat Detection System...
+Loading External Analysis Agent...
+
+Loading weights:   0%|          | 0/103 [00:00<?, ?it/s]
+Loading weights: 100%|##########| 103/103 [00:00<00:00, 10543.60it/s]
+[1mBertModel LOAD REPORT[0m from: sentence-transformers/all-MiniLM-L6-v2
+Key                     | Status     |  | 
+------------------------+------------+--+-
+embeddings.position_ids | UNEXPECTED |  | 
+
+[3mNotes:
+- UNEXPECTED[3m	:can be ignored when loading from different task/architecture; not ok 
+if you expect identical arch.[0m
+Successfully loaded URL ML models.
+External Analysis Agent loaded successfully!
+Using device: cpu for inference optimization.
+
+Loading weights:   0%|          | 0/102 [00:00<?, ?it/s]
+Loading weights: 100%|##########| 102/102 [00:00<00:00, 31822.30it/s]
+[1mDebertaV2ForSequenceClassification LOAD REPORT[0m from: microsoft/deberta-v3-small
+Key                                     | Status     | 
+----------------------------------------+------------+-
+mask_predictions.classifier.bias        | UNEXPECTED | 
+mask_predictions.dense.bias             | UNEXPECTED | 
+lm_predictions.lm_head.dense.weight     | UNEXPECTED | 
+mask_predictions.LayerNorm.bias         | UNEXPECTED | 
+lm_predictions.lm_head.dense.bias       | UNEXPECTED | 
+mask_predictions.classifier.weight      | UNEXPECTED | 
+mask_predictions.dense.weight           | UNEXPECTED | 
+mask_predictions.LayerNorm.weight       | UNEXPECTED | 
+lm_predictions.lm_head.bias             | UNEXPECTED | 
+lm_predictions.lm_head.LayerNorm.bias   | UNEXPECTED | 
+lm_predictions.lm_head.LayerNorm.weight | UNEXPECTED | 
+pooler.dense.weight                     | MISSING    | 
+classifier.bias                         | MISSING    | 
+classifier.weight                       | MISSING    | 
+pooler.dense.bias                       | MISSING    | 
+
+[3mNotes:
+- UNEXPECTED[3m	:can be ignored when loading from different task/architecture; not ok 
+if you expect identical arch.
+- MISSING[3m	:those params were newly initialized because missing from the 
+checkpoint. Consider training on your downstream task.[0m
+
+Loading weights:   0%|          | 0/103 [00:00<?, ?it/s]
+Loading weights: 100%|##########| 103/103 [00:00<00:00, 8661.57it/s]
+[1mBertModel LOAD REPORT[0m from: sentence-transformers/all-MiniLM-L6-v2
+Key                     | Status     |  | 
+------------------------+------------+--+-
+embeddings.position_ids | UNEXPECTED |  | 
+
+[3mNotes:
+- UNEXPECTED[3m	:can be ignored when loading from different task/architecture; not ok 
+if you expect identical arch.[0m
+Loading Hugging Face pipelines...
+
+Loading weights:   0%|          | 0/102 [00:00<?, ?it/s]
+Loading weights: 100%|##########| 102/102 [00:00<00:00, 16007.00it/s]
+This checkpoint seem corrupted. The tied weights mapping for this model specifies to 
+tie cls.predictions.bias to cls.predictions.decoder.bias, but both are absent from the 
+checkpoint, and we could not find another related tied weight for those keys
+[1mDebertaV2ForMaskedLM LOAD REPORT[0m from: microsoft/deberta-v3-small
+Key                                           | Status     | 
+----------------------------------------------+------------+-
+lm_predictions.lm_head.dense.weight           | UNEXPECTED | 
+lm_predictions.lm_head.dense.bias             | UNEXPECTED | 
+lm_predictions.lm_head.bias                   | UNEXPECTED | 
+lm_predictions.lm_head.LayerNorm.bias         | UNEXPECTED | 
+lm_predictions.lm_head.LayerNorm.weight       | UNEXPECTED | 
+deberta.embeddings.position_embeddings.weight | UNEXPECTED | 
+cls.predictions.transform.LayerNorm.bias      | MISSING    | 
+cls.predictions.bias                          | MISSING    | 
+cls.predictions.transform.dense.bias          | MISSING    | 
+cls.predictions.transform.dense.weight        | MISSING    | 
+cls.predictions.decoder.bias                  | MISSING    | 
+cls.predictions.transform.LayerNorm.weight    | MISSING    | 
+
+[3mNotes:
+- UNEXPECTED[3m	:can be ignored when loading from different task/architecture; not ok 
+if you expect identical arch.
+- MISSING[3m	:those params were newly initialized because missing from the 
+checkpoint. Consider training on your downstream task.[0m
+
+Loading weights:   0%|          | 0/104 [00:00<?, ?it/s]
+Loading weights: 100%|##########| 104/104 [00:00<00:00, 9914.03it/s]
+Successfully loaded HF pipelines.
+Loading local text ML models...
+Successfully loaded text ML models.
+System initialized!
+Traceback (most recent call last):
+  File "C:\Users\SOHAM\OneDrive\Desktop\New 
+folder\Indian-hackthon-2.0-version/ai_agent/bridge.py", line 65, in <module>
+    print("\U0001f680 AegisAI Python bridge running on http://localhost:5001")
+    ~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File 
+"C:\Users\SOHAM\AppData\Local\Programs\Python\Python313\Lib\encodings\cp1252.py", line 
+19, in encode
+    return codecs.charmap_encode(input,self.errors,encoding_table)[0]
+           ~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+UnicodeEncodeError: 'charmap' codec can't encode character '\U0001f680' in position 0: 
+character maps to <undefined>
