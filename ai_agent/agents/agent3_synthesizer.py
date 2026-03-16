@@ -28,6 +28,13 @@ class SynthesizerAgent:
         risk_score += agent2_results['ai_generated_probability'] * self.weights['ai_generated']
         risk_score += agent1_results['domain_similarity'] * self.weights['domain_similarity']
         
+        # New: Factor in connection score (divergence)
+        connection_score = agent2_results.get('connection_score', 1.0)
+        if connection_score < 0.4:
+            # Low connection = higher risk
+            divergence_penalty = (0.4 - connection_score) * 0.5 
+            risk_score += divergence_penalty
+            
         # Adjust based on aggressive sentiment
         if agent2_results.get('sentiment_label') == 'NEGATIVE' and agent2_results.get('sentiment_score', 0) > 0.8:
             risk_score += 0.1
@@ -94,6 +101,9 @@ class SynthesizerAgent:
         if agent2_results['ai_generated_probability'] > 0.5:
             reasons.append("Content appears AI-generated with scam patterns")
             
+        if agent2_results.get('connection_score', 1.0) < 0.4:
+            reasons.append(f"Semantic divergence: {agent2_results.get('connection_message', 'URL does not match text context')}")
+
         if agent2_results.get('sentiment_label') == 'NEGATIVE' and agent2_results.get('sentiment_score', 0) > 0.8:
             reasons.append(f"Highly aggressive/negative tone detected (Score: {agent2_results['sentiment_score']:.1%})")
         
@@ -132,7 +142,15 @@ class SynthesizerAgent:
             agent1_results, agent2_results, threat_types, risk_score
         )
         
-        confidence = risk_score * 0.8 + 0.2  
+        # Confidence: Now reflects certainty in the verdict
+        # If score is close to 0 (Safe) or 1 (Critical), confidence should be high.
+        # It's lowest when the score is near the thresholds.
+        if risk_score < 0.2:
+            confidence = (1.0 - risk_score) # High confidence for very safe messages
+        elif risk_score > 0.8:
+            confidence = risk_score # High confidence for very dangerous messages
+        else:
+            confidence = 0.7 # Medium confidence for borderline cases
         
         result = {
             'threat_types': threat_types,
