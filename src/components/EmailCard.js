@@ -1,21 +1,45 @@
+import { Star } from 'lucide-react';
+
+function formatTime(isoTime) {
+  const date = new Date(isoTime);
+  if (Number.isNaN(date.getTime())) {
+    return '';
+  }
+
+  return date.toLocaleTimeString([], {
+    hour: '2-digit',
+    minute: '2-digit',
+  });
+}
+
 export default function EmailCard({ email }) {
   return (
-    <article className="rounded-[2.5rem] border border-white/50 bg-white p-6 shadow-[0_8px_30px_rgb(0,0,0,0.04)] transition hover:shadow-[0_12px_40px_rgb(0,0,0,0.06)] flex flex-col h-full">
-      <p className="text-xs uppercase tracking-wider text-slate-400 font-bold mb-1">Sender</p>
-      <p className="text-sm font-semibold text-slate-800 break-all">{email.from}</p>
+    <article className="group grid grid-cols-[auto_auto_minmax(140px,1fr)_minmax(0,2.6fr)_auto] items-center gap-3 px-3 py-2 border-b border-slate-200 bg-white hover:bg-slate-50 transition-colors text-sm">
+      <input
+        type="checkbox"
+        aria-label={`Select email from ${email.from}`}
+        className="h-4 w-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500"
+      />
 
-      <p className="mt-4 text-xs uppercase tracking-wide text-slate-500 font-semibold">Subject</p>
-      <p className="mt-1 text-base font-bold text-slate-800">{email.subject}</p>
+      <button
+        type="button"
+        aria-label="Star email"
+        className="text-slate-300 hover:text-amber-500 transition-colors"
+      >
+        <Star className="w-4 h-4" />
+      </button>
 
-      <p className="mt-4 text-xs uppercase tracking-wide text-slate-500 font-semibold">Preview</p>
-      <p className="mt-1 text-sm leading-relaxed text-slate-600 line-clamp-3">{email.snippet}</p>
+      <p className="font-semibold text-slate-800 truncate pr-2">{email.from}</p>
 
-      <div className="mt-5 border-t border-slate-100 pt-4 relative">
-        <p className="text-[10px] uppercase tracking-wide text-slate-400 font-semibold">Time received</p>
-        <p className="mt-1 text-xs text-slate-500 font-medium">
-          {new Date(email.time).toLocaleString()}
-        </p>
-      </div>
+      <p className="min-w-0 truncate text-slate-700">
+        <span className="font-semibold text-slate-900">{email.subject}</span>
+        <span className="text-slate-400 px-1">-</span>
+        <span className="text-slate-500">{email.snippet}</span>
+      </p>
+
+      <time className="text-xs font-medium text-slate-500 whitespace-nowrap pl-2">
+        {formatTime(email.time)}
+      </time>
     </article>
   );
 }
