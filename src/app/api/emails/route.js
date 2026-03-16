@@ -76,12 +76,17 @@ export async function GET() {
 
         const payload = msgRes.data.payload || {};
         const headers = payload.headers || [];
+        const from = getHeader(headers, 'From') || 'Unknown Sender';
+        const subject = getHeader(headers, 'Subject') || '(No Subject)';
+        const snippet = msgRes.data.snippet || 'No preview available';
+        const time = toIsoTime(msgRes.data.internalDate);
 
         return {
-          from: getHeader(headers, 'From') || 'Unknown Sender',
-          subject: getHeader(headers, 'Subject') || '(No Subject)',
-          snippet: msgRes.data.snippet || 'No preview available',
-          time: toIsoTime(msgRes.data.internalDate),
+          id: message.id,
+          from,
+          subject,
+          snippet,
+          time,
         };
       })
     );
