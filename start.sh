@@ -2,7 +2,7 @@
 
 # Configuration
 PROJECT_ROOT=$(pwd)
-PYTHON_EXECUTABLE="/Library/Frameworks/Python.framework/Versions/3.9/bin/python3"
+PYTHON_EXECUTABLE="$PROJECT_ROOT/.venv/Scripts/python"
 BRIDGE_SCRIPT="$PROJECT_ROOT/ai_agent/bridge.py"
 PORT=5001
 

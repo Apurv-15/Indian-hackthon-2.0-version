@@ -35,11 +35,23 @@ export default function Home() {
     const file = e.target.files?.[0];
     if (file) {
       setImageFile(file);
-      const reader = new FileReader();
-      reader.onloadend = () => {
-        setImagePreview(reader.result as string);
-      };
-      reader.readAsDataURL(file);
+      
+      // If it's a text file, read the content and put it in the input area
+      if (file.type === 'text/plain' || file.name.endsWith('.txt')) {
+        const reader = new FileReader();
+        reader.onload = (event) => {
+          const content = event.target?.result as string;
+          setInput(prev => prev ? `${prev}\n\n[File Content: ${file.name}]\n${content}` : content);
+          setImagePreview("data:text/plain;base64," + btoa(content.slice(0, 50))); // Minimal text preview
+        };
+        reader.readAsText(file);
+      } else {
+        const reader = new FileReader();
+        reader.onloadend = () => {
+          setImagePreview(reader.result as string);
+        };
+        reader.readAsDataURL(file);
+      }
     }
   };
 
@@ -158,6 +170,11 @@ export default function Home() {
                         <video src={imagePreview} className="h-40 rounded-xl border border-slate-200 shadow-sm" controls />
                       ) : imageFile?.type.startsWith('audio') ? (
                         <audio src={imagePreview} className="w-full max-w-md rounded-xl border border-slate-200 shadow-sm p-2 bg-slate-50" controls />
+                      ) : imageFile?.type === 'text/plain' || imageFile?.name.endsWith('.txt') ? (
+                        <div className="h-24 w-24 rounded-xl border border-slate-200 shadow-sm bg-slate-50 flex flex-col items-center justify-center gap-1">
+                          <FileText className="w-8 h-8 text-blue-500" />
+                          <span className="text-[10px] font-bold text-slate-400 uppercase truncate px-2 w-full text-center">{imageFile.name}</span>
+                        </div>
                       ) : (
                         <img src={imagePreview} alt="Upload preview" className="h-24 rounded-xl border border-slate-200 shadow-sm object-cover" />
                       )}
@@ -276,6 +293,60 @@ export default function Home() {
                       </div>
                     </div>
                   </div>
+
+                  {/* Detailed Intelligence Section */}
+                  {result.detailedScores && (
+                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                      <div className="bg-white px-6 py-5 rounded-[2rem] border border-slate-100 shadow-sm flex flex-col gap-1">
+                        <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Phishing Prob</span>
+                        <div className="flex items-end gap-2">
+                          <span className="text-2xl font-bold text-slate-800">{(result.detailedScores.phishingProb * 100).toFixed(0)}%</span>
+                          <div className="flex-1 h-1.5 bg-slate-100 rounded-full mb-2 overflow-hidden">
+                            <motion.div 
+                              initial={{ width: 0 }}
+                              animate={{ width: `${result.detailedScores.phishingProb * 100}%` }}
+                              className="h-full bg-red-400" 
+                            />
+                          </div>
+                        </div>
+                      </div>
+                      <div className="bg-white px-6 py-5 rounded-[2rem] border border-slate-100 shadow-sm flex flex-col gap-1">
+                        <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Spam Signal</span>
+                        <div className="flex items-end gap-2">
+                          <span className="text-2xl font-bold text-slate-800">{(result.detailedScores.spamProb * 100).toFixed(0)}%</span>
+                          <div className="flex-1 h-1.5 bg-slate-100 rounded-full mb-2 overflow-hidden">
+                            <motion.div 
+                              initial={{ width: 0 }}
+                              animate={{ width: `${result.detailedScores.spamProb * 100}%` }}
+                              className="h-full bg-blue-400" 
+                            />
+                          </div>
+                        </div>
+                      </div>
+                      <div className="bg-white px-6 py-5 rounded-[2rem] border border-slate-100 shadow-sm flex flex-col gap-1">
+                        <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Prompt Injection</span>
+                        <div className="flex items-end gap-2">
+                          <span className="text-2xl font-bold text-slate-800">{(result.detailedScores.promptInjectionScore * 100).toFixed(0)}%</span>
+                          <div className="flex-1 h-1.5 bg-slate-100 rounded-full mb-2 overflow-hidden">
+                            <motion.div 
+                              initial={{ width: 0 }}
+                              animate={{ width: `${result.detailedScores.promptInjectionScore * 100}%` }}
+                              className="h-full bg-purple-400" 
+                            />
+                          </div>
+                        </div>
+                      </div>
+                      <div className="bg-white px-6 py-5 rounded-[2rem] border border-slate-100 shadow-sm flex flex-col gap-1">
+                        <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Tone Analysis</span>
+                        <div className="flex items-center gap-2 mt-1">
+                          <span className={`px-2 py-0.5 rounded-md text-[10px] font-bold uppercase ${result.detailedScores.sentimentLabel === 'NEGATIVE' ? 'bg-orange-100 text-orange-600' : 'bg-green-100 text-green-600'}`}>
+                            {result.detailedScores.sentimentLabel}
+                          </span>
+                          <span className="text-xs font-semibold text-slate-500">{(result.detailedScores.sentimentScore * 100).toFixed(0)}% intensity</span>
+                        </div>
+                      </div>
+                    </div>
+                  )}
 
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-6 pb-20">
                     {/* Indicators of Compromise */}

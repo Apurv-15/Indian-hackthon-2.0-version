@@ -339,7 +339,15 @@ export default function EmailsPage() {
                 <div>
                   <h4 className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-3 flex items-center gap-2">
                     <Info className="w-3.5 h-3.5" />
-                    Forensic Reasoning
+                    Explainable Reasoning
+                  </h4>
+                  <p className="text-sm text-slate-600 leading-relaxed bg-slate-50/50 p-4 rounded-2xl border border-slate-100 mb-6">
+                    {selectedEmail.analysis.explanation}
+                  </p>
+
+                  <h4 className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-3 flex items-center gap-2">
+                    <Search className="w-3.5 h-3.5" />
+                    Key Indicators
                   </h4>
                   {selectedEmail.analysis.indicators?.length > 0 ? (
                     <ul className="space-y-3">
@@ -351,8 +359,8 @@ export default function EmailsPage() {
                       ))}
                     </ul>
                   ) : (
-                    <p className="text-sm text-slate-500 italic">
-                      {selectedEmail.analysis.explanation}
+                    <p className="text-sm text-slate-400 italic px-2">
+                      No specific behavioral signals detected.
                     </p>
                   )}
                 </div>

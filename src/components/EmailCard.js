@@ -60,10 +60,29 @@ export default function EmailCard({ email, onSelect }) {
 
       <p className="font-semibold text-slate-800 truncate pr-2">{email.from}</p>
 
-      <p className="min-w-0 truncate text-slate-700">
-        <span className="font-semibold text-slate-900">{email.subject}</span>
-        <span className="text-slate-400 px-1">-</span>
-        <span className="text-slate-500">{email.snippet}</span>
+      <p className="min-w-0 flex flex-col gap-1">
+        <span className="truncate text-slate-700">
+          <span className="font-semibold text-slate-900">{email.subject}</span>
+          <span className="text-slate-400 px-1">-</span>
+          <span className="text-slate-500">{email.snippet}</span>
+        </span>
+        {email.analysis?.indicators?.length > 0 && (
+          <span className="flex gap-2 overflow-hidden items-center mt-1">
+            {email.analysis.indicators.slice(0, 2).map((indicator, idx) => (
+              <span key={idx} className="text-[9px] font-bold text-slate-400 bg-slate-100 px-1.5 py-0.5 rounded border border-slate-200 uppercase tracking-tighter truncate max-w-[150px]">
+                {indicator}
+              </span>
+            ))}
+            {email.analysis.indicators.length > 2 && (
+              <span className="text-[9px] font-bold text-slate-300">
+                +{email.analysis.indicators.length - 2} more signals
+              </span>
+            )}
+            <span className="text-[9px] text-slate-400 italic font-medium ml-1 truncate">
+              {email.analysis.explanation}
+            </span>
+          </span>
+        )}
       </p>
 
       <div className={`flex items-center gap-1.5 px-2 py-0.5 rounded-full border text-[10px] font-bold uppercase tracking-wider ${getRiskColor(risk)}`}>
