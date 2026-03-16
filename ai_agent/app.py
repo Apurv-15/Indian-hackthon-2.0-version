@@ -82,6 +82,7 @@ REASONS:
   • Spam Probability (Heuristic): {result['detailed_results']['agent2']['spam_probability']:.1%}
   • Spam Probability (ML Model): {result['detailed_results']['agent2'].get('spam_ml_score', 0.0):.1%}
   • AI Generation Score: {result['detailed_results']['agent2']['ai_generated_probability']:.1%}
+  • Text-URL Connection: {result['detailed_results']['agent2'].get('connection_score', 0.0):.1%} ({result['detailed_results']['agent2'].get('connection_message', '')})
 """
         
         sentiment_label = result['detailed_results']['agent2'].get('sentiment_label', 'UNKNOWN')
