@@ -3,6 +3,7 @@ from utils.preprocessor import TextPreprocessor
 from agents.agent1_external import ExternalAnalysisAgent
 from agents.agent2_content import ContentAnalysisAgent
 from agents.agent3_synthesizer import SynthesizerAgent
+from agents.agent4_prompt import PromptInjectionAgent
 import gradio as gr
 
 class ThreatDetectionSystem:
@@ -12,6 +13,7 @@ class ThreatDetectionSystem:
         self.agent1 = ExternalAnalysisAgent()
         self.agent2 = ContentAnalysisAgent()
         self.agent3 = SynthesizerAgent()
+        self.agent4 = PromptInjectionAgent()
         print("System initialized!")
     
     def analyze(self, user_input):
@@ -33,9 +35,13 @@ class ThreatDetectionSystem:
         agent2_results = self.agent2.analyze(preprocessed)
         print(f"   -> [AGENT 2 Report] Phishing Prob: {agent2_results['phishing_probability']:.2f}, Spam Prob: {agent2_results.get('spam_probability', 0):.2f}", flush=True)
         
+        print("💉 [AGENT 4: Prompt Injection Detector] Scanning for AI hijacking attempts...", flush=True)
+        agent4_results = self.agent4.analyze(user_input)
+        print(f"   -> [AGENT 4 Report] Injection Risk: {agent4_results['confidence']:.1%}", flush=True)
+
         # Step 3: Synthesize results
-        print("⚖️  [AGENT 3: Synthesizer] Evaluating Agent 1 & 2 reports...", flush=True)
-        final_result = self.agent3.synthesize(agent1_results, agent2_results)
+        print("⚖️  [AGENT 3: Synthesizer] Evaluating reports from all agents...", flush=True)
+        final_result = self.agent3.synthesize(agent1_results, agent2_results, agent4_results)
         print(f"   -> [AGENT 3 Final Verdict] Risk Level: {final_result['risk_level']} with {final_result['confidence']:.1%} confidence.", flush=True)
         print("="*50 + "\n", flush=True)
         
@@ -101,11 +107,15 @@ REASONS:
         if sentiment_label != 'UNKNOWN':
             output += f"  • Aggressive Tone Detection: {sentiment_label} ({sentiment_score:.1%})\n"
         
-        if result['detailed_results']['agent2']['prompt_injection']:
+        if result['detailed_results']['agent2']['prompt_injection'] or result['detailed_results']['agent4']['prompt_injection_detected']:
             output += "  ⚠️ Prompt Injection Detected!\n"
+            if result['detailed_results']['agent4']['attack_categories']:
+                output += f"    - Categories: {', '.join(result['detailed_results']['agent4']['attack_categories'])}\n"
         
         if result['detailed_results']['agent2'].get('using_transformer', False):
             output += f"  • Transformer Score: {result['detailed_results']['agent2']['transformer_score']:.1%}\n"
+        
+        output += f"  • Prompt Injection Score: {result['detailed_results']['agent4']['confidence']:.1%}\n"
         
         return output
 
