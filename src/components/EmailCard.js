@@ -1,4 +1,4 @@
-import { Star } from 'lucide-react';
+import { Star, ShieldAlert, ShieldCheck, AlertTriangle } from 'lucide-react';
 
 function formatTime(isoTime) {
   const date = new Date(isoTime);
@@ -12,17 +12,46 @@ function formatTime(isoTime) {
   });
 }
 
-export default function EmailCard({ email }) {
+export default function EmailCard({ email, onSelect }) {
+  const risk = email.analysis?.riskLevel || 'Safe';
+  
+  const getRiskIcon = (level) => {
+    switch (level) {
+      case 'Safe': return <ShieldCheck className="w-4 h-4 text-emerald-500" />;
+      case 'Low': return <ShieldCheck className="w-4 h-4 text-blue-500" />;
+      case 'Medium': return <AlertTriangle className="w-4 h-4 text-amber-500" />;
+      case 'High':
+      case 'Critical': return <ShieldAlert className="w-4 h-4 text-red-500" />;
+      default: return null;
+    }
+  };
+
+  const getRiskColor = (level) => {
+    switch (level) {
+      case 'Safe': return 'bg-emerald-50 text-emerald-700 border-emerald-100';
+      case 'Low': return 'bg-blue-50 text-blue-700 border-blue-100';
+      case 'Medium': return 'bg-amber-50 text-amber-700 border-amber-100';
+      case 'High':
+      case 'Critical': return 'bg-red-50 text-red-700 border-red-100';
+      default: return 'bg-slate-50 text-slate-700 border-slate-100';
+    }
+  };
+
   return (
-    <article className="group grid grid-cols-[auto_auto_minmax(140px,1fr)_minmax(0,2.6fr)_auto] items-center gap-3 px-3 py-2 border-b border-slate-200 bg-white hover:bg-slate-50 transition-colors text-sm">
+    <article 
+      onClick={() => onSelect(email)}
+      className="group grid grid-cols-[auto_auto_minmax(140px,1.2fr)_minmax(0,2.6fr)_auto_auto] items-center gap-3 px-4 py-3 border-b border-slate-200 bg-white hover:bg-slate-50 transition-all cursor-pointer text-sm"
+    >
       <input
         type="checkbox"
+        onClick={(e) => e.stopPropagation()}
         aria-label={`Select email from ${email.from}`}
         className="h-4 w-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500"
       />
 
       <button
         type="button"
+        onClick={(e) => e.stopPropagation()}
         aria-label="Star email"
         className="text-slate-300 hover:text-amber-500 transition-colors"
       >
@@ -36,6 +65,11 @@ export default function EmailCard({ email }) {
         <span className="text-slate-400 px-1">-</span>
         <span className="text-slate-500">{email.snippet}</span>
       </p>
+
+      <div className={`flex items-center gap-1.5 px-2 py-0.5 rounded-full border text-[10px] font-bold uppercase tracking-wider ${getRiskColor(risk)}`}>
+        {getRiskIcon(risk)}
+        {risk}
+      </div>
 
       <time className="text-xs font-medium text-slate-500 whitespace-nowrap pl-2">
         {formatTime(email.time)}

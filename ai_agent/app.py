@@ -18,15 +18,26 @@ class ThreatDetectionSystem:
         """Main analysis pipeline"""
         start_time = time.time()
         
+        print("\n" + "="*50, flush=True)
+        print("🤖 [SYSTEM] Initiating Cyber Threat Analysis...", flush=True)
         # Step 1: Preprocess
         preprocessed = self.preprocessor.preprocess(user_input)
+        print(f"🧹 [PREPROCESSOR] Extracted {len(preprocessed['urls'])} URLs from text of length {preprocessed['text_length']}.", flush=True)
         
         # Step 2: Run agents in parallel (simulated)
+        print("🚨 [AGENT 1: External Analyst] Analyzing URLs and Domains...", flush=True)
         agent1_results = self.agent1.analyze(preprocessed)
+        print(f"   -> [AGENT 1 Report] URL Risk Score: {agent1_results['url_risk']:.2f}", flush=True)
+
+        print("🧠 [AGENT 2: Content Analyst] Analyzing Semantic Content...", flush=True)
         agent2_results = self.agent2.analyze(preprocessed)
+        print(f"   -> [AGENT 2 Report] Phishing Prob: {agent2_results['phishing_probability']:.2f}, Spam Prob: {agent2_results.get('spam_probability', 0):.2f}", flush=True)
         
         # Step 3: Synthesize results
+        print("⚖️  [AGENT 3: Synthesizer] Evaluating Agent 1 & 2 reports...", flush=True)
         final_result = self.agent3.synthesize(agent1_results, agent2_results)
+        print(f"   -> [AGENT 3 Final Verdict] Risk Level: {final_result['risk_level']} with {final_result['confidence']:.1%} confidence.", flush=True)
+        print("="*50 + "\n", flush=True)
         
         # Add processing time
         final_result['processing_time'] = time.time() - start_time
