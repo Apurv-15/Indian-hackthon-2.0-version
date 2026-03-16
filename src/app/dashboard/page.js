@@ -32,34 +32,34 @@ export default function DashboardPage() {
   }, [fetchEmails]);
 
   return (
-    <main className="flex-1 h-full overflow-y-auto bg-gradient-to-b from-slate-950 via-slate-900 to-slate-950 px-4 py-8 md:px-8">
-      <section className="mx-auto max-w-6xl">
-        <header className="mb-8 rounded-2xl border border-slate-700/70 bg-slate-900/60 p-6 shadow-xl shadow-black/20">
-          <h1 className="text-3xl font-bold text-white">Incoming Threat Emails</h1>
-          <p className="mt-2 text-sm text-slate-300">
-            Monitoring Gmail inbox in near real-time. Refresh interval: 10 seconds.
-          </p>
+    <main className="flex-1 h-full overflow-y-auto w-full p-2 md:p-6 z-0">
+      <section className="mx-auto max-w-7xl space-y-8">
+        
+        <header className="py-2">
+          <h1 className="text-3xl font-medium text-slate-800 tracking-tight">
+            Welcome Back, <span className="font-light text-slate-500">Jacob Jones.</span>
+          </h1>
         </header>
 
         {loading && (
-          <div className="rounded-2xl border border-slate-700/70 bg-slate-900/60 p-6 text-slate-300">
+          <div className="rounded-[2.5rem] border border-white/50 bg-white p-6 shadow-[0_8px_30px_rgb(0,0,0,0.04)] text-slate-500 flex justify-center items-center py-20 font-medium">
             Loading emails...
           </div>
         )}
 
         {error && !loading && (
-          <div className="mb-6 rounded-2xl border border-red-500/40 bg-red-500/10 p-4 text-sm text-red-300">
+          <div className="mb-6 rounded-2xl border border-red-200 bg-red-50 p-4 text-sm text-red-600 font-medium tracking-wide">
             {error}
           </div>
         )}
 
         {!loading && !error && emails.length === 0 && (
-          <div className="rounded-2xl border border-slate-700/70 bg-slate-900/60 p-6 text-slate-300">
+          <div className="rounded-[2.5rem] border border-white/50 bg-white p-6 shadow-[0_8px_30px_rgb(0,0,0,0.04)] text-slate-500 text-center py-20 font-medium">
             No emails found in the inbox.
           </div>
         )}
 
-        <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
+        <div className="grid grid-cols-1 gap-6 md:grid-cols-2 xl:grid-cols-3 pb-12">
           {emails.map((email, index) => (
             <EmailCard
               key={`${email.time}-${index}`}
