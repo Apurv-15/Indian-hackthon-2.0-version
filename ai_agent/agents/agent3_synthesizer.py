@@ -1,8 +1,8 @@
 class SynthesizerAgent:
     def __init__(self):
         self.thresholds = {
-            'low': 0.3,
-            'medium': 0.6,
+            'low': 0.22,
+            'medium': 0.5,
             'high': 0.8
         }
         
@@ -11,10 +11,11 @@ class SynthesizerAgent:
             'url_risk': 0.3,
             'spam': 0.15,
             'ai_generated': 0.1,
-            'domain_similarity': 0.05
+            'domain_similarity': 0.05,
+            'prompt_injection': 0.3 # High impact when detected
         }
     
-    def calculate_risk_score(self, agent1_results, agent2_results):
+    def calculate_risk_score(self, agent1_results, agent2_results, agent4_results):
         """Calculate overall risk score"""
         risk_score = 0.0
         
@@ -28,6 +29,9 @@ class SynthesizerAgent:
         risk_score += agent2_results['ai_generated_probability'] * self.weights['ai_generated']
         risk_score += agent1_results['domain_similarity'] * self.weights['domain_similarity']
         
+        # Integrate Agent 4 Prompt Injection Score
+        risk_score += agent4_results['confidence'] * self.weights['prompt_injection']
+        
         # New: Factor in connection score (divergence)
         connection_score = agent2_results.get('connection_score', 1.0)
         if connection_score < 0.4:
@@ -39,8 +43,9 @@ class SynthesizerAgent:
         if agent2_results.get('sentiment_label') == 'NEGATIVE' and agent2_results.get('sentiment_score', 0) > 0.8:
             risk_score += 0.1
             
-        if agent2_results['prompt_injection']:
-            risk_score += 0.3
+        # Combine Prompt Injection flags from Agent 2 (heuristic) and Agent 4 (transformer)
+        if agent2_results['prompt_injection'] or agent4_results['prompt_injection_detected']:
+            risk_score = max(risk_score, 0.7) # Ensure at least HIGH risk if injection is detected
             
         return min(risk_score, 1.0)
     
@@ -55,7 +60,7 @@ class SynthesizerAgent:
         else:
             return "MINIMAL"
     
-    def determine_threat_type(self, risk_score, agent1_results, agent2_results):
+    def determine_threat_type(self, risk_score, agent1_results, agent2_results, agent4_results):
         """Classify the type of threat"""
         threats = []
         
@@ -65,7 +70,7 @@ class SynthesizerAgent:
         if agent1_results['url_risk'] > 0.7 or agent1_results.get('url_ml_risk', 0) > 0.7:
             threats.append("Malicious URL")
         
-        if agent2_results['prompt_injection']:
+        if agent2_results['prompt_injection'] or agent4_results['prompt_injection_detected']:
             threats.append("Prompt Injection")
         
         if agent2_results['ai_generated_probability'] > 0.6:
@@ -81,7 +86,7 @@ class SynthesizerAgent:
         
         return threats
     
-    def generate_explanation(self, agent1_results, agent2_results, threat_types, risk_score):
+    def generate_explanation(self, agent1_results, agent2_results, agent4_results, threat_types, risk_score):
         """Generate detailed, context-aware forensic reasoning like a security expert."""
         reasons = []
         
@@ -120,11 +125,13 @@ class SynthesizerAgent:
             urg_str = ', '.join(f"'{u}'" for u in urgency_matches[:3])
             reasons.append(f"Behavioral Threat: Urgency/pressure language detected [{urg_str}] — creates artificial time pressure to bypass critical thinking")
         
-        # ── Prompt Injection ──
-        if agent2_results.get('prompt_injection'):
-            patterns = agent2_results.get('prompt_injection_patterns', [])
-            detail = patterns[0] if patterns else 'Instruction override attempt detected'
-            reasons.append(f"Prompt Injection: {detail} — this is an attempt to hijack AI systems or bypass security controls")
+        # ── Prompt Injection (Agent 4 Integration) ──
+        if agent4_results.get('prompt_injection_detected'):
+            cats = agent4_results.get('attack_categories', [])
+            detail = f"Detected Categories: {', '.join(cats)}" if cats else "AI instruction override attempt"
+            reasons.append(f"Prompt Injection Agent: {detail} (Risk: {agent4_results['confidence']:.0%}) — advanced hijacking pattern identified via transformer analysis")
+        elif agent2_results.get('prompt_injection'):
+            reasons.append("Prompt Injection: Heuristic pattern match — suspicious instruction override pattern detected in input text")
         
         # ── AI Generated Content ──
         ai_prob = agent2_results.get('ai_generated_probability', 0)
@@ -194,16 +201,16 @@ class SynthesizerAgent:
             'actions': actions[:4]
         }
     
-    def synthesize(self, agent1_results, agent2_results):
+    def synthesize(self, agent1_results, agent2_results, agent4_results):
         """Main synthesis function"""
-        risk_score = self.calculate_risk_score(agent1_results, agent2_results)
+        risk_score = self.calculate_risk_score(agent1_results, agent2_results, agent4_results)
         
         risk_level = self.determine_risk_level(risk_score)
         
-        threat_types = self.determine_threat_type(risk_score, agent1_results, agent2_results)
+        threat_types = self.determine_threat_type(risk_score, agent1_results, agent2_results, agent4_results)
         
         explanation = self.generate_explanation(
-            agent1_results, agent2_results, threat_types, risk_score
+            agent1_results, agent2_results, agent4_results, threat_types, risk_score
         )
         
         # Confidence: Now dynamically reflects certainty in the verdict
@@ -221,7 +228,8 @@ class SynthesizerAgent:
             'explanation': explanation,
             'detailed_results': {
                 'agent1': agent1_results,
-                'agent2': agent2_results
+                'agent2': agent2_results,
+                'agent4': agent4_results
             }
         }
         

@@ -226,8 +226,8 @@ class ContentAnalysisAgent:
         spam_ml_prob = 0.0
         if self.has_text_ml:
             try:
-                features = self.text_vectorizer.transform([text])
-                spam_ml_prob = self.text_ml_model.predict_proba(features)[0][1]
+                features = self.scikit_vectorizer.transform([text])
+                spam_ml_prob = self.scikit_model.predict_proba(features)[0][1]
                 # Fine-tune transformer score using the pickle model baseline
                 transformer_score = (transformer_score * 0.7) + (spam_ml_prob * 0.3)
                 spam_probability = spam_ml_prob
@@ -243,10 +243,11 @@ class ContentAnalysisAgent:
         connection_penalty = max(0, 0.5 - connection_score) if connection_score < 0.4 else 0
         combined_phishing = min(max(phishing_score, transformer_score) + connection_penalty, 1.0)
                 
-        if spam_probability == 0.0:
-            spam_indicators = ['free', 'win', 'winner', 'prize', 'click here', 'offer', 'limited time']
+        if spam_probability < 0.3:
+            spam_indicators = ['free', 'win', 'winner', 'prize', 'click here', 'offer', 'limited time', 'lottery', 'congratulations', 'cash', 'money', 'claim', 'award']
             spam_matches = [ind for ind in spam_indicators if ind in text.lower()]
-            spam_probability = min(len(spam_matches) / 5, 1.0)
+            heuristic_spam = min(len(spam_matches) / 6, 1.0) # 1 match = 0.16 (Safe), 2 matches = 0.33 (Low), 3 matches = 0.5 (Medium)
+            spam_probability = max(spam_probability, heuristic_spam)
             
         # Optional sentiment analysis using pipeline
         sentiment_score = 0.0
@@ -270,6 +271,7 @@ class ContentAnalysisAgent:
             'urgency_matches': urgency_matches,
             'ai_patterns': ai_patterns,
             'transformer_score': transformer_score,
+            'using_transformer': True,
             'sentiment_score': sentiment_score,
             'sentiment_label': sentiment_label,
             'connection_score': connection_score,
