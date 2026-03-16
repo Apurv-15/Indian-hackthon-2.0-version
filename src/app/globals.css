@@ -54,3 +54,35 @@ body {
 ::-webkit-scrollbar-thumb:hover {
   background: rgba(0, 0, 0, 0.2);
 }
+
+@keyframes floatCardA {
+  0% {
+    transform: translate3d(0, 0, 0) rotate(16deg);
+  }
+  50% {
+    transform: translate3d(0, -10px, 0) rotate(17deg);
+  }
+  100% {
+    transform: translate3d(0, 0, 0) rotate(16deg);
+  }
+}
+
+@keyframes floatCardB {
+  0% {
+    transform: translate3d(0, 0, 0) rotate(-24deg);
+  }
+  50% {
+    transform: translate3d(0, -12px, 0) rotate(-22deg);
+  }
+  100% {
+    transform: translate3d(0, 0, 0) rotate(-24deg);
+  }
+}
+
+.float-card-a {
+  animation: floatCardA 4.8s ease-in-out infinite;
+}
+
+.float-card-b {
+  animation: floatCardB 5.4s ease-in-out infinite;
+}
