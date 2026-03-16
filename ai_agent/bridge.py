@@ -39,9 +39,23 @@ def analyze():
             "riskLevel": risk_level,
             "threatType": ", ".join(result["threat_types"]),
             "confidenceScore": round(result["confidence"] * 100, 1),
+            "riskScore": round(result["risk_score"], 4),
             "explanation": " ".join(result["explanation"]["reasons"]),
             "indicators": result["explanation"]["reasons"],
             "recommendations": result["explanation"]["actions"],
+            "detailedScores": {
+                "phishingProb": round(result["detailed_results"]["agent2"].get("phishing_probability", 0), 3),
+                "spamProb": round(max(
+                    result["detailed_results"]["agent2"].get("spam_probability", 0),
+                    result["detailed_results"]["agent2"].get("spam_ml_score", 0)
+                ), 3),
+                "urlRisk": round(max(
+                    result["detailed_results"]["agent1"].get("url_risk", 0),
+                    result["detailed_results"]["agent1"].get("url_ml_risk", 0)
+                ), 3),
+                "sentimentLabel": result["detailed_results"]["agent2"].get("sentiment_label", "UNKNOWN"),
+                "sentimentScore": round(result["detailed_results"]["agent2"].get("sentiment_score", 0), 3),
+            },
         })
     except Exception as e:
         return jsonify({"error": str(e)}), 500
