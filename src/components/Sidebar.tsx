@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { Shield, Search, Activity, FileText, Lock } from 'lucide-react';
+import { Shield, Search, Activity, FileText, Lock, LogOut } from 'lucide-react';
 
 const navItems = [
   { href: '/',          label: 'Scanner',   icon: Search },
@@ -15,53 +15,55 @@ export default function Sidebar() {
   const pathname = usePathname();
 
   return (
-    <aside className="w-64 border-r border-[var(--color-border)] glass-panel flex-col hidden md:flex z-10 shrink-0">
-      {/* Logo */}
-      <div className="p-6 flex items-center gap-3 border-b border-[var(--color-border)]">
-        <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-[var(--color-primary)] to-indigo-800 flex items-center justify-center shadow-lg shadow-indigo-500/20">
-          <Shield className="w-6 h-6 text-white" />
+    <aside className="w-[260px] h-full bg-[var(--color-sidebar)] rounded-[2.5rem] flex flex-col shadow-2xl overflow-hidden shrink-0 border border-white/5 z-20">
+      {/* Logo Section */}
+      <div className="p-8 border-b border-white/5 flex items-center gap-4">
+        <div className="w-10 h-10 rounded-2xl bg-white flex items-center justify-center shadow-lg">
+          <Shield className="w-6 h-6 text-black" />
         </div>
-        <h1 className="text-xl font-bold tracking-tight text-white">
-          Aegis<span className="text-[var(--color-primary)]">AI</span>
-        </h1>
+        <div>
+          <h1 className="text-lg font-bold text-white tracking-wide">AegisAI</h1>
+          <p className="text-[11px] text-zinc-400 capitalize">Threat Portal</p>
+        </div>
       </div>
 
-      {/* Nav */}
-      <nav className="flex-1 p-4 space-y-1">
+      {/* Navigation Section */}
+      <nav className="flex-1 px-4 py-8 space-y-2">
         {navItems.map(({ href, label, icon: Icon }) => {
           const isActive = pathname === href;
           return (
             <Link
               key={href}
               href={href}
-              className={`flex items-center gap-3 px-4 py-3 rounded-lg font-medium transition-colors border ${
+              className={`flex items-center gap-4 px-5 py-3.5 rounded-2xl font-medium transition-all group ${
                 isActive
-                  ? 'bg-[var(--color-primary)]/10 text-[var(--color-primary)] border-[var(--color-primary)]/20'
-                  : 'text-slate-400 hover:text-slate-200 hover:bg-white/5 border-transparent'
+                  ? 'bg-white/10 text-white shadow-sm'
+                  : 'text-zinc-500 hover:text-zinc-300 hover:bg-white/5'
               }`}
             >
-              <Icon className="w-5 h-5" />
-              {label}
+              <Icon className={`w-5 h-5 transition-colors ${isActive ? 'text-white' : 'group-hover:text-zinc-300'}`} />
+              <span className="text-sm tracking-wide">{label}</span>
             </Link>
           );
         })}
       </nav>
 
-      {/* Engine status */}
-      <div className="p-4 border-t border-[var(--color-border)]">
-        <div className="glass-panel rounded-lg p-4 text-sm">
-          <div className="flex items-center gap-2 mb-2 text-slate-300">
-            <Activity className="w-4 h-4 text-[var(--color-accent)]" />
-            <span>Engine Status</span>
+      {/* User Profile / Footer Section */}
+      <div className="p-4 mt-auto mb-4 space-y-2">
+        <div className="flex items-center gap-3 px-5 py-4 bg-white/5 rounded-2xl border border-white/5">
+          <div className="w-10 h-10 rounded-full bg-slate-800 flex items-center justify-center text-white font-bold text-sm border border-white/10 shrink-0">
+            JD
           </div>
-          <div className="flex justify-between items-center">
-            <span className="text-slate-400">Gemini 1.5 Pro</span>
-            <span className="flex items-center gap-1.5 text-[var(--color-accent)] text-xs font-medium bg-[var(--color-accent)]/10 px-2 py-1 rounded-full">
-              <span className="w-1.5 h-1.5 rounded-full bg-[var(--color-accent)] animate-pulse" />
-              Online
-            </span>
+          <div className="flex flex-col min-w-0">
+            <span className="text-sm font-semibold text-white truncate">Jacob Jones</span>
+            <span className="text-[10px] text-zinc-500 truncate">jacob@aegisai.com</span>
           </div>
         </div>
+        
+        <button className="w-full flex items-center gap-3 px-5 py-3 text-zinc-500 hover:text-white transition-colors group">
+          <LogOut className="w-5 h-5 group-hover:translate-x-0.5 transition-transform" />
+          <span className="text-sm font-medium">Safe Exit</span>
+        </button>
       </div>
     </aside>
   );
