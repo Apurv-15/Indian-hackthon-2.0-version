@@ -89,12 +89,15 @@ class ExternalAnalysisAgent:
                 features = self.url_vectorizer.transform([url])
                 # phishing.pkl is LogisticRegression
                 url_ml_prob = self.url_ml_model.predict_proba(features)[0][1]
-                if url_ml_prob > 0.6:
-                    risk_score += 0.4
-                    reasons.append(f"ML model marked URL as highly suspicious (Score: {url_ml_prob:.1%})")
-                elif url_ml_prob > 0.4:
-                    risk_score += 0.2
-                    reasons.append(f"ML model flagged potential URL risk (Score: {url_ml_prob:.1%})")
+                
+                # Hybrid Logic: Weight the ML model heavily if it has high confidence
+                if url_ml_prob > 0.8:
+                    risk_score = max(risk_score, 0.9)
+                    reasons.append(f"ML model identified highly malicious URL structure (Score: {url_ml_prob:.1%})")
+                elif url_ml_prob > 0.5:
+                    risk_score = max(risk_score, 0.6)
+                    reasons.append(f"ML model flagged suspicious URL structure (Score: {url_ml_prob:.1%})")
+                
             except Exception as e:
                 print(f"Error predicting URL with ML model: {e}")
         
