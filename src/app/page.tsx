@@ -19,6 +19,7 @@ import {
   Info
 } from 'lucide-react';
 import { analyzeThreat, ThreatAnalysisResult } from '../services/threat-engine';
+import { saveScan } from '../services/scan-history';
 
 export default function Home() {
   const [input, setInput] = useState('');
@@ -68,6 +69,7 @@ export default function Home() {
 
       const analysis = await analyzeThreat(input, base64Data, mimeType);
       setResult(analysis);
+      saveScan(input, !!imageFile, analysis);
     } catch (err) {
       console.error(err);
       setError(err instanceof Error ? err.message : 'An error occurred during analysis.');
@@ -108,54 +110,7 @@ export default function Home() {
   };
 
   return (
-    <div className="flex h-screen overflow-hidden bg-[var(--color-bg-base)] text-slate-200">
-      {/* Sidebar */}
-      <aside className="w-64 border-r border-[var(--color-border)] glass-panel flex flex-col hidden md:flex z-10">
-        <div className="p-6 flex items-center gap-3 border-b border-[var(--color-border)]">
-          <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-[var(--color-primary)] to-indigo-800 flex items-center justify-center shadow-lg shadow-indigo-500/20">
-            <Shield className="w-6 h-6 text-white" />
-          </div>
-          <h1 className="text-xl font-bold tracking-tight text-white">Aegis<span className="text-[var(--color-primary)]">AI</span></h1>
-        </div>
-        
-        <nav className="flex-1 p-4 space-y-2">
-          <a href="#" className="flex items-center gap-3 px-4 py-3 rounded-lg bg-[var(--color-primary)]/10 text-[var(--color-primary)] font-medium border border-[var(--color-primary)]/20 transition-colors">
-            <Search className="w-5 h-5" />
-            Scanner
-          </a>
-          <a href="#" className="flex items-center gap-3 px-4 py-3 rounded-lg text-slate-400 hover:text-slate-200 hover:bg-white/5 transition-colors">
-            <Activity className="w-5 h-5" />
-            Dashboard
-          </a>
-          <a href="#" className="flex items-center gap-3 px-4 py-3 rounded-lg text-slate-400 hover:text-slate-200 hover:bg-white/5 transition-colors">
-            <FileText className="w-5 h-5" />
-            Reports
-          </a>
-          <a href="#" className="flex items-center gap-3 px-4 py-3 rounded-lg text-slate-400 hover:text-slate-200 hover:bg-white/5 transition-colors">
-            <Lock className="w-5 h-5" />
-            Policies
-          </a>
-        </nav>
-        
-        <div className="p-4 border-t border-[var(--color-border)]">
-          <div className="glass-panel rounded-lg p-4 text-sm">
-            <div className="flex items-center gap-2 mb-2 text-slate-300">
-              <Activity className="w-4 h-4 text-[var(--color-accent)]" />
-              <span>Engine Status</span>
-            </div>
-            <div className="flex justify-between items-center">
-              <span className="text-slate-400">Gemini 1.5 Pro</span>
-              <span className="flex items-center gap-1.5 text-[var(--color-accent)] text-xs font-medium bg-[var(--color-accent)]/10 px-2 py-1 rounded-full">
-                <span className="w-1.5 h-1.5 rounded-full bg-[var(--color-accent)] animate-pulse"></span>
-                Online
-              </span>
-            </div>
-          </div>
-        </div>
-      </aside>
-
-      {/* Main Content */}
-      <main className="flex-1 flex flex-col h-full overflow-hidden relative">
+    <main className="flex-1 flex flex-col h-full overflow-hidden relative">
         {/* Mobile Header */}
         <header className="md:hidden p-4 border-b border-[var(--color-border)] glass-panel flex items-center gap-3 z-10">
           <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-[var(--color-primary)] to-indigo-800 flex items-center justify-center">
@@ -367,7 +322,6 @@ export default function Home() {
         {/* Background decorative elements */}
         <div className="absolute top-[-10%] left-[-10%] w-[40%] h-[40%] rounded-full bg-[var(--color-primary)]/5 blur-[120px] pointer-events-none"></div>
         <div className="absolute bottom-[-10%] right-[-10%] w-[40%] h-[40%] rounded-full bg-[var(--color-accent)]/5 blur-[120px] pointer-events-none"></div>
-      </main>
-    </div>
+    </main>
   );
 }
