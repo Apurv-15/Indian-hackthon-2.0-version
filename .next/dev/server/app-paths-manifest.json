@@ -1,7 +1,0 @@
-{
-  "/api/emails/route": "app/api/emails/route.js",
-  "/dashboard/page": "app/dashboard/page.js",
-  "/page": "app/page.js",
-  "/policies/page": "app/policies/page.js",
-  "/reports/page": "app/reports/page.js"
-}
