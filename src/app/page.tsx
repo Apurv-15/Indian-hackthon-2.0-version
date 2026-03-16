@@ -112,91 +112,92 @@ export default function Home() {
   return (
     <main className="flex-1 flex flex-col h-full overflow-hidden relative">
         {/* Mobile Header */}
-        <header className="md:hidden p-4 border-b border-[var(--color-border)] glass-panel flex items-center gap-3 z-10">
-          <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-[var(--color-primary)] to-indigo-800 flex items-center justify-center">
-            <Shield className="w-5 h-5 text-white" />
+        <header className="md:hidden px-4 py-3 bg-white/60 backdrop-blur-md border-b border-slate-200 flex items-center gap-3 z-10 sticky top-0">
+          <div className="w-8 h-8 rounded-xl bg-white border border-slate-200 shadow-sm flex items-center justify-center">
+            <Shield className="w-4 h-4 text-[var(--color-primary)]" />
           </div>
-          <h1 className="text-lg font-bold text-white">Aegis<span className="text-[var(--color-primary)]">AI</span></h1>
+          <h1 className="text-lg font-bold text-slate-800">Aegis<span className="text-[var(--color-primary)]">AI</span></h1>
         </header>
 
-        <div className="flex-1 overflow-y-auto p-4 md:p-8 lg:p-10 z-0">
-          <div className="max-w-5xl mx-auto space-y-8">
+        <div className="flex-1 overflow-y-auto p-4 md:p-8 z-0">
+          <div className="max-w-4xl mx-auto space-y-6 flex flex-col items-center">
             
             {/* Header Section */}
-            <header className="space-y-2">
-              <h2 className="text-3xl font-bold text-white tracking-tight">Threat Scanner</h2>
-              <p className="text-slate-400 max-w-2xl">
-                Analyze URLs, emails, code snippets, or images for potential security threats. 
-                Our multi-agent engine provides explainable reasoning for every assessment.
-              </p>
+            <header className="flex flex-col items-center text-center mt-4 md:mt-12 mb-4 space-y-3">
+              <div className="w-16 h-16 bg-white shadow-sm border border-slate-200/60 rounded-3xl flex items-center justify-center mb-1">
+                <Shield className="w-8 h-8 text-[var(--color-primary)]" />
+              </div>
+              <h2 className="text-3xl md:text-4xl font-bold text-slate-800 tracking-tight">
+                Hey, I'm AegisAI.
+              </h2>
+              <h3 className="text-lg md:text-xl text-slate-500 font-medium max-w-lg">
+                Upload media or paste context below to begin the forensic analysis.
+              </h3>
             </header>
 
             {/* Input Section */}
-            <section className="glass-panel rounded-2xl p-1 overflow-hidden">
-              <div className="bg-[#151822] rounded-xl p-4 md:p-6 flex flex-col gap-4">
+            <section className="bg-white rounded-[2.5rem] p-4 overflow-hidden shadow-[0_8px_30px_rgb(0,0,0,0.04)] border border-white/50 w-full max-w-3xl">
+              <div className="flex flex-col gap-2">
                 <textarea
                   value={input}
                   onChange={(e) => setInput(e.target.value)}
-                  placeholder="Paste a suspicious URL, email content, prompt, or code snippet here..."
-                  className="w-full h-32 bg-transparent border-none resize-none focus:ring-0 text-slate-200 placeholder-slate-500 text-lg"
+                  placeholder="How can I help you today?"
+                  className="w-full h-24 bg-transparent border-none resize-none focus:ring-0 text-slate-700 placeholder-slate-400 text-base p-2 px-3 outline-none"
                 />
                 
-                {/* Image Preview */}
+                {/* Image/Media Preview */}
                 <AnimatePresence>
                   {imagePreview && (
                     <motion.div 
                       initial={{ opacity: 0, height: 0 }}
                       animate={{ opacity: 1, height: 'auto' }}
                       exit={{ opacity: 0, height: 0 }}
-                      className="relative inline-block w-fit"
+                      className="relative inline-block w-fit px-3"
                     >
-                      <img src={imagePreview} alt="Upload preview" className="h-32 rounded-lg border border-[var(--color-border)] object-cover" />
+                      {imageFile?.type.startsWith('video') ? (
+                        <video src={imagePreview} className="h-40 rounded-xl border border-slate-200 shadow-sm" controls />
+                      ) : imageFile?.type.startsWith('audio') ? (
+                        <audio src={imagePreview} className="w-full max-w-md rounded-xl border border-slate-200 shadow-sm p-2 bg-slate-50" controls />
+                      ) : (
+                        <img src={imagePreview} alt="Upload preview" className="h-24 rounded-xl border border-slate-200 shadow-sm object-cover" />
+                      )}
                       <button 
                         onClick={removeImage}
-                        className="absolute -top-2 -right-2 bg-slate-800 text-white p-1 rounded-full border border-[var(--color-border)] hover:bg-slate-700 transition-colors"
+                        className="absolute -top-2 -right-2 bg-white text-slate-500 p-1 rounded-full border border-slate-200 shadow-sm hover:text-red-500 transition-colors z-20"
                       >
-                        <X className="w-4 h-4" />
+                        <X className="w-3.5 h-3.5" />
                       </button>
                     </motion.div>
                   )}
                 </AnimatePresence>
 
-                <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 pt-4 border-t border-[var(--color-border)]">
-                  <div className="flex items-center gap-3">
+                <div className="flex justify-between items-center gap-4 pt-2">
+                  <div className="flex items-center gap-2">
                     <input 
                       type="file" 
                       ref={fileInputRef} 
                       onChange={handleImageUpload} 
-                      accept="image/*" 
+                      accept="image/*,audio/*,video/*" 
                       className="hidden" 
                     />
                     <button 
                       onClick={() => fileInputRef.current?.click()}
-                      className="flex items-center gap-2 px-4 py-2 rounded-lg bg-white/5 hover:bg-white/10 text-slate-300 transition-colors text-sm font-medium border border-[var(--color-border)]"
+                      className="flex items-center gap-2 px-3 py-2 rounded-xl text-slate-500 hover:text-slate-700 hover:bg-slate-50 transition-colors text-sm font-medium"
+                      title="Attach file"
                     >
-                      <ImageIcon className="w-4 h-4" />
-                      Attach Image
+                      <Upload className="w-5 h-5" />
                     </button>
-                    <span className="text-xs text-slate-500 hidden md:inline-block">
-                      Supports screenshots of phishing emails or suspicious sites
-                    </span>
                   </div>
                   
                   <button
                     onClick={handleAnalyze}
                     disabled={isAnalyzing || (!input.trim() && !imageFile)}
-                    className="w-full sm:w-auto flex items-center justify-center gap-2 px-6 py-2.5 rounded-lg bg-[var(--color-primary)] hover:bg-[var(--color-primary-hover)] text-white font-medium transition-all disabled:opacity-50 disabled:cursor-not-allowed shadow-lg shadow-indigo-500/25"
+                    className="flex items-center justify-center w-10 h-10 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                   >
                     {isAnalyzing ? (
-                      <>
-                        <Loader2 className="w-5 h-5 animate-spin" />
-                        Analyzing...
-                      </>
+                      <Loader2 className="w-5 h-5 animate-spin" />
                     ) : (
-                      <>
-                        <Shield className="w-5 h-5" />
-                        Scan Threat
-                      </>
+                      <ChevronRight className="w-5 h-5" />
                     )}
                   </button>
                 </div>
@@ -227,25 +228,24 @@ export default function Home() {
                   className="space-y-6"
                 >
                   <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-                    <h3 className="text-xl font-semibold text-white flex items-center gap-2">
+                    <h3 className="text-xl font-semibold text-slate-800 flex items-center gap-2">
                       <Activity className="w-5 h-5 text-[var(--color-primary)]" />
                       Analysis Results
                     </h3>
-                    <div className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-indigo-500/10 border border-indigo-500/20 text-indigo-400 text-xs font-semibold">
-                      <ShieldCheck className="w-3.5 h-3.5" />
-                      Verified by 3 AI Experts
+                    <div className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-slate-100 border border-slate-200 text-slate-600 text-xs font-semibold">
+                      <ShieldCheck className="w-3.5 h-3.5 text-[var(--color-primary)]" />
+                      Verified by AI Forensics
                     </div>
                   </div>
                   
                   <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                     {/* Risk Score Card */}
-                    <div className={`glass-panel rounded-2xl p-6 border ${getRiskBg(result.riskLevel)} flex flex-col items-center justify-center text-center relative overflow-hidden`}>
-                      <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-transparent via-current to-transparent opacity-50"></div>
+                    <div className={`rounded-[2.5rem] p-8 border ${getRiskBg(result.riskLevel)} bg-white shadow-[0_8px_30px_rgb(0,0,0,0.04)] flex flex-col items-center justify-center text-center relative overflow-hidden`}>
                       {getRiskIcon(result.riskLevel)}
-                      <h4 className="text-sm font-medium text-slate-400 mt-4 uppercase tracking-wider">Risk Level</h4>
+                      <h4 className="text-sm font-medium text-slate-500 mt-4 uppercase tracking-wider">Risk Level</h4>
                       <p className={`text-4xl font-bold mt-1 ${getRiskColor(result.riskLevel)}`}>{result.riskLevel}</p>
                       
-                      <div className="mt-6 w-full bg-black/20 rounded-full h-2 overflow-hidden">
+                      <div className="mt-6 w-full bg-slate-100 rounded-full h-2 overflow-hidden">
                         <motion.div 
                           initial={{ width: 0 }}
                           animate={{ width: `${result.confidenceScore}%` }}
@@ -253,40 +253,40 @@ export default function Home() {
                           className={`h-full ${result.riskLevel === 'Safe' ? 'bg-[var(--color-safe)]' : result.riskLevel === 'Low' ? 'bg-blue-400' : result.riskLevel === 'Medium' ? 'bg-[var(--color-warning)]' : result.riskLevel === 'High' ? 'bg-orange-500' : 'bg-[var(--color-danger)]'}`}
                         />
                       </div>
-                      <p className="text-xs text-slate-500 mt-2">{result.confidenceScore}% Confidence</p>
+                      <p className="text-xs text-slate-500 mt-2 font-medium">{result.confidenceScore}% Confidence</p>
                     </div>
 
                     {/* Threat Type & Explanation */}
-                    <div className="md:col-span-2 glass-panel rounded-2xl p-6 flex flex-col">
+                    <div className="md:col-span-2 bg-white shadow-[0_8px_30px_rgb(0,0,0,0.04)] border border-white/50 rounded-[2.5rem] p-8 flex flex-col">
                       <div className="flex items-start justify-between mb-4">
                         <div>
-                          <h4 className="text-sm font-medium text-slate-400 uppercase tracking-wider">Threat Classification</h4>
-                          <p className="text-xl font-semibold text-white mt-1">{result.threatType}</p>
+                          <h4 className="text-sm font-medium text-slate-500 uppercase tracking-wider">Threat Classification</h4>
+                          <p className="text-xl font-semibold text-slate-800 mt-1">{result.threatType}</p>
                         </div>
-                        <div className="p-2 bg-[var(--color-primary)]/10 rounded-lg">
+                        <div className="p-2 bg-slate-50 border border-slate-100 rounded-xl">
                           <Info className="w-5 h-5 text-[var(--color-primary)]" />
                         </div>
                       </div>
                       
                       <div className="flex-1">
-                        <h4 className="text-sm font-medium text-slate-400 uppercase tracking-wider mb-2">Explainable Reasoning</h4>
-                        <p className="text-slate-300 leading-relaxed text-sm">
+                        <h4 className="text-sm font-medium text-slate-500 uppercase tracking-wider mb-2">Explainable Reasoning</h4>
+                        <p className="text-slate-600 leading-relaxed text-sm">
                           {result.explanation}
                         </p>
                       </div>
                     </div>
                   </div>
 
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6 pb-20">
                     {/* Indicators of Compromise */}
-                    <div className="glass-panel rounded-2xl p-6">
-                      <h4 className="text-sm font-medium text-slate-400 uppercase tracking-wider mb-4 flex items-center gap-2">
+                    <div className="bg-white shadow-[0_8px_30px_rgb(0,0,0,0.04)] border border-white/50 rounded-[2.5rem] p-8">
+                      <h4 className="text-sm font-medium text-slate-500 uppercase tracking-wider mb-4 flex items-center gap-2">
                         <Search className="w-4 h-4" />
                         Key Indicators
                       </h4>
                       <ul className="space-y-3">
                         {result.indicators.map((indicator, idx) => (
-                          <li key={idx} className="flex items-start gap-3 text-sm text-slate-300">
+                          <li key={idx} className="flex items-start gap-3 text-sm text-slate-600">
                             <ChevronRight className="w-4 h-4 text-[var(--color-primary)] shrink-0 mt-0.5" />
                             <span>{indicator}</span>
                           </li>
@@ -295,14 +295,14 @@ export default function Home() {
                     </div>
 
                     {/* Recommendations */}
-                    <div className="glass-panel rounded-2xl p-6">
-                      <h4 className="text-sm font-medium text-slate-400 uppercase tracking-wider mb-4 flex items-center gap-2">
+                    <div className="bg-white shadow-[0_8px_30px_rgb(0,0,0,0.04)] border border-white/50 rounded-[2.5rem] p-8">
+                      <h4 className="text-sm font-medium text-slate-500 uppercase tracking-wider mb-4 flex items-center gap-2">
                         <ShieldCheck className="w-4 h-4" />
                         Recommended Actions
                       </h4>
                       <ul className="space-y-3">
                         {result.recommendations.map((rec, idx) => (
-                          <li key={idx} className="flex items-start gap-3 text-sm text-slate-300">
+                          <li key={idx} className="flex items-start gap-3 text-sm text-slate-600">
                             <div className="w-5 h-5 rounded-full bg-[var(--color-accent)]/10 text-[var(--color-accent)] flex items-center justify-center shrink-0 mt-0.5 border border-[var(--color-accent)]/20 text-xs font-bold">
                               {idx + 1}
                             </div>
@@ -319,9 +319,7 @@ export default function Home() {
           </div>
         </div>
         
-        {/* Background decorative elements */}
-        <div className="absolute top-[-10%] left-[-10%] w-[40%] h-[40%] rounded-full bg-[var(--color-primary)]/5 blur-[120px] pointer-events-none"></div>
-        <div className="absolute bottom-[-10%] right-[-10%] w-[40%] h-[40%] rounded-full bg-[var(--color-accent)]/5 blur-[120px] pointer-events-none"></div>
+        {/* Removing the harsh blob backgrounds since the layout has a mesh */}
     </main>
   );
 }
