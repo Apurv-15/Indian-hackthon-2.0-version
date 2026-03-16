@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import "./globals.css";
+import Sidebar from "../components/Sidebar";
 
 export const metadata: Metadata = {
   title: "AegisAI - Advanced Threat Detection",
@@ -13,7 +14,12 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en">
-      <body>{children}</body>
+      <body>
+        <div className="flex h-screen overflow-hidden bg-[var(--color-bg-base)] text-slate-200">
+          <Sidebar />
+          {children}
+        </div>
+      </body>
     </html>
   );
 }
