@@ -15,9 +15,9 @@ class ExternalAnalysisAgent:
         # Load pickle models for URL analysis
         model_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'models')
         try:
-            with open(os.path.join(model_dir, 'phishing.pkl'), 'rb') as f:
+            with open(os.path.join(model_dir, 'phishing_new.pkl'), 'rb') as f:
                 self.url_ml_model = pickle.load(f)
-            with open(os.path.join(model_dir, 'vectorizerurl.pkl'), 'rb') as f:
+            with open(os.path.join(model_dir, 'vectorizerurl_new.pkl'), 'rb') as f:
                 self.url_vectorizer = pickle.load(f)
             self.has_url_ml = True
             print("Successfully loaded URL ML models.")

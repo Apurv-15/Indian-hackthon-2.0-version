@@ -45,10 +45,10 @@ class ContentAnalysisAgent:
         print("Loading local text ML models...")
         model_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'models')
         try:
-            with open(os.path.join(model_dir, 'model.pkl'), 'rb') as f:
-                self.text_ml_model = pickle.load(f)
-            with open(os.path.join(model_dir, 'vectorizer.pkl'), 'rb') as f:
-                self.text_vectorizer = pickle.load(f)
+            with open(os.path.join(model_dir, 'model_new.pkl'), 'rb') as f:
+                self.scikit_model = pickle.load(f)
+            with open(os.path.join(model_dir, 'vectorizer_new.pkl'), 'rb') as f:
+                self.scikit_vectorizer = pickle.load(f)
             self.has_text_ml = True
             print("Successfully loaded text ML models.")
         except Exception as e:
