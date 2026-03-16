@@ -7,6 +7,9 @@ import os, sys, warnings
 os.environ["TOKENIZERS_PARALLELISM"] = "false"
 warnings.filterwarnings("ignore")
 
+import io
+sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8')
+
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 
 from flask import Flask, request, jsonify
@@ -55,6 +58,9 @@ def analyze():
                 ), 3),
                 "sentimentLabel": result["detailed_results"]["agent2"].get("sentiment_label", "UNKNOWN"),
                 "sentimentScore": round(result["detailed_results"]["agent2"].get("sentiment_score", 0), 3),
+                "promptInjectionScore": round(result["detailed_results"]["agent4"].get("confidence", 0), 3),
+                "promptInjectionDetected": result["detailed_results"]["agent4"].get("prompt_injection_detected", False),
+                "attackCategories": result["detailed_results"]["agent4"].get("attack_categories", []),
             },
         })
     except Exception as e:

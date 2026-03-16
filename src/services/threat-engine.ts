@@ -5,6 +5,16 @@ export interface ThreatAnalysisResult {
   explanation: string;
   indicators: string[];
   recommendations: string[];
+  detailedScores?: {
+    phishingProb: number;
+    spamProb: number;
+    urlRisk: number;
+    sentimentLabel: string;
+    sentimentScore: number;
+    promptInjectionScore: number;
+    promptInjectionDetected: boolean;
+    attackCategories: string[];
+  };
 }
 
 export async function analyzeThreat(input: string, imageBase64?: string, mimeType?: string): Promise<ThreatAnalysisResult> {
