@@ -1,11 +1,4 @@
-from transformers import AutoTokenizer, AutoModelForSequenceClassification, AutoModel, pipeline
-import torch
-import torch.nn.functional as F
-import os
-import pickle
-import re
-
-class ContentAnalysisAgent:
+"""\n╔═══════════════════════════════════════════════════════════════════════╗\n║                  AGENT 2: CONTENT ANALYSIS AGENT                       ║\n║           Email/Text Analysis with Hybrid ML Algorithms               ║\n╚═══════════════════════════════════════════════════════════════════════╝\n\nALGORITHMS USED:\n\n1. MULTINOMIAL NAIVE BAYES (MNB)\n   - Model File: model_new.pkl\n   - Vectorizer: vectorizer_new.pkl (TF-IDF)\n   - Purpose: Text classification for spam/phishing detection\n   - Training Data: phishing_email_dataset.csv + spam_detection_dataset.csv\n   - Implementation: scikit-learn MultinomialNB classifier\n   - Output: Probability scores for text classification\n   - Use Case: Fast, interpretable baseline model for text threats\n   - Advantages: Efficient, works well with sparse TF-IDF features\n\n2. LOGISTIC REGRESSION (via scikit-learn)\n   - Embedded in scikit-learn pipeline\n   - Purpose: Alternative probabilistic classifier\n   - Training Data: Same as MNB models\n   - Output: Baseline probability for comparative analysis\n   - Use Case: Provides secondary validation of threat probability\n\n3. DEBERTA-V3-SMALL (Transformer Neural Network)\n   - Model: microsoft/deberta-v3-small\n   - Purpose: Deep contextual understanding of phishing content\n   - Type: Transformer-based sequence classification\n   - Application: Detects semantic patterns beyond keyword matching\n   - Output: Contextual threat probability (0-1 scale)\n   - Advantages: Captures nuanced language patterns and social engineering tactics\n\n4. DISTILBERT (Sentiment Analysis)\n   - Model: distilbert/distilbert-base-uncased-finetuned-sst-2-english\n   - Purpose: Detect aggressive/urgent tone (pressure tactics)\n   - Type: BERT distillation for efficiency\n   - Output: Sentiment label + confidence score\n   - Use Case: Identifies social engineering pressure in emails\n\n5. SENTENCE-TRANSFORMERS (MiniLM Semantic Embeddings)\n   - Model: sentence-transformers/all-MiniLM-L6-v2\n   - Purpose: Semantic similarity between email text and URLs\n   - Algorithm: Mean pooling of token embeddings + cosine similarity\n   - Output: Connection score (0-1 scale)\n   - Use Case: Detects divergence attacks (text ≠ URL destination)\n\n6. HEURISTIC PATTERN MATCHING\n   - Keyword spotting (phishing keywords, urgency phrases)\n   - Regex patterns for common scam indicators\n   - Prompt injection pattern detection\n\"\"\"\n\nfrom transformers import AutoTokenizer, AutoModelForSequenceClassification, AutoModel, pipeline\nimport torch\nimport torch.nn.functional as F\nimport os\nimport pickle\nimport re\n\nclass ContentAnalysisAgent:
     def __init__(self):
         # Detection of Device
         self.device = torch.device("mps") if torch.backends.mps.is_available() else torch.device("cpu")
@@ -78,7 +71,16 @@ class ContentAnalysisAgent:
         ]
     
     def analyze_phishing(self, text):
-        """Analyze text for phishing indicators"""
+        """
+        Analyze text for phishing indicators using pattern matching.
+        
+        ALGORITHM: Heuristic Rule-Based Detection
+        - Keyword spotting for known phishing indicators
+        - Urgency phrase detection for pressure tactics
+        - Personal information request detection
+        
+        Returns: Combined phishing score (0-1)
+        """
         text_lower = text.lower()
         
         keyword_matches = []
@@ -139,7 +141,16 @@ class ContentAnalysisAgent:
             return 0.0, []
     
     def analyze_with_transformer(self, text):
-        """Use transformer model for classification with optimized inference"""
+        """
+        Use transformer model for contextual text classification.
+        
+        ALGORITHM: DeBERTa-v3-Small (Microsoft's Transformer)
+        - State-of-the-art sequence classification
+        - Captures nuanced semantic patterns
+        - More accurate than traditional ML for complex social engineering
+        
+        Returns: Probability of malicious content (0-1)
+        """
         try:
             inputs = self.tokenizer(text, return_tensors="pt", truncation=True, max_length=512).to(self.device)
             
@@ -168,7 +179,18 @@ class ContentAnalysisAgent:
         return embeddings
 
     def analyze_connection(self, text, urls):
-        """Analyze the connection between email text and URLs"""
+        """
+        Analyze semantic connection between email text and URLs.
+        
+        ALGORITHM: Cosine Similarity of Dense Embeddings
+        - Uses MiniLM embeddings to compute semantic similarity
+        - Detects "divergence attacks" where text ≠ URL destination
+        - Example: Email says "Click to update PayPal" but URL is malicious.ru
+        
+        Returns: (connection_score, message)
+        - Score 1.0 = Perfect alignment
+        - Score < 0.2 = High divergence (suspicious)
+        """
         if not urls:
             return 1.0, "No URLs to analyze"
         

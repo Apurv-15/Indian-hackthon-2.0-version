@@ -1,13 +1,4 @@
-class SynthesizerAgent:
-    def __init__(self):
-        self.thresholds = {
-            'low': 0.22,
-            'medium': 0.5,
-            'high': 0.8
-        }
-        
-        self.weights = {
-            'phishing': 0.4,
+\"\"\"\n╔═══════════════════════════════════════════════════════════════════════╗\n║                  AGENT 3: SYNTHESIZER AGENT                            ║\n║              Multi-Agent Consensus & Risk Aggregation                 ║\n╚═══════════════════════════════════════════════════════════════════════╝\n\nALGORITHM: Weighted Ensemble Voting with Inter-Agent Communication\n\nPurpose:\n- Aggregates results from Agent 1 (URL analysis), Agent 2 (Content analysis), \n  and Agent 4 (Prompt injection detection)\n- Applies weighted consensus voting\n- Detects agreement patterns between agents\n- Escalates confidence when multiple agents agree\n\nWeighting Strategy:\n    Risk Score = (A1.url_risk × 0.30) + (A2.phishing × 0.40) + \n                 (A2.spam × 0.15) + (A2.ai_gen × 0.10) + \n                 (A1.domain_sim × 0.05) + (A4.injection × 0.30) + \n                 Divergence_Penalty + Sentiment_Aggression\n\nKey Features:\n1. Weighted scoring from multiple ML models\n2. Divergence penalty for URL/text mismatches\n3. Threat type classification based on agent consensus\n4. Forensic explanation generation with evidence citation\n5. Threshold-based risk level classification\n\"\"\"\n\nclass SynthesizerAgent:\n    def __init__(self):\n        self.thresholds = {\n            'low': 0.22,\n            'medium': 0.5,\n            'high': 0.8\n        }\n        \n        self.weights = {\n            'phishing': 0.4,
             'url_risk': 0.3,
             'spam': 0.15,
             'ai_generated': 0.1,
