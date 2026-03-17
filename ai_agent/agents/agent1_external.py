@@ -1,3 +1,40 @@
+"""
+╔════════════════════════════════════════════════════════════════════════════╗
+║                     AGENT 1: EXTERNAL ANALYSIS AGENT                        ║
+║              URL, Domain & External Threat Intelligence Analysis             ║
+╚════════════════════════════════════════════════════════════════════════════╝
+
+ALGORITHMS USED:
+
+1. SUPPORT VECTOR MACHINE (SVM)
+   - Model File: phishing_new.pkl
+   - Vectorizer: vectorizerurl_new.pkl (TF-IDF)
+   - Purpose: URL classification for malicious/phishing detection
+   - Training Data: malicious_url_dataset.csv
+   - Implementation: scikit-learn SVM classifier
+   - Output: Probability of URL being malicious (0-1 scale)
+   - Use Case: Detects sophisticated URL patterns not caught by heuristics
+
+2. SENTENCE TRANSFORMERS (MiniLM-L6-v2 Embeddings)
+   - Model: sentence-transformers/all-MiniLM-L6-v2
+   - Purpose: Semantic similarity matching for domain/brand impersonation detection
+   - Application: Homoglyph attack detection by comparing embeddings
+   - Output: Cosine similarity scores (0-1 scale)
+   - Use Case: Identifies domains similar to legitimate brands
+
+3. HEURISTIC PATTERN MATCHING
+   - Regex patterns for TLD detection
+   - Keyword spotting (login, verify, account, etc.)
+   - IP address detection
+   - URL shortener detection
+   - Subdomain analysis
+
+4. SEQUENCE MATCHING (String Similarity)
+   - algorithm: difflib.SequenceMatcher
+   - Purpose: Fuzzy string matching for domain name comparison
+   - Example: comparing "gogle.com" to "google.com"
+"""
+
 import re
 from sentence_transformers import SentenceTransformer
 import numpy as np
@@ -13,14 +50,16 @@ class ExternalAnalysisAgent:
         self.model = SentenceTransformer('sentence-transformers/all-MiniLM-L6-v2')
         
         # Load pickle models for URL analysis
+        # ALGORITHM: Support Vector Machine (SVM) with TF-IDF vectorization
+        # Training data: malicious_url_dataset.csv
         model_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'models')
         try:
             with open(os.path.join(model_dir, 'phishing_new.pkl'), 'rb') as f:
-                self.url_ml_model = pickle.load(f)
+                self.url_ml_model = pickle.load(f)  # SVM classifier
             with open(os.path.join(model_dir, 'vectorizerurl_new.pkl'), 'rb') as f:
-                self.url_vectorizer = pickle.load(f)
+                self.url_vectorizer = pickle.load(f)  # TF-IDF feature extractor
             self.has_url_ml = True
-            print("Successfully loaded URL ML models.")
+            print("Successfully loaded URL ML models (SVM + TF-IDF).")
         except Exception as e:
             print(f"Failed to load URL ML models: {e}")
             self.has_url_ml = False
@@ -86,8 +125,12 @@ class ExternalAnalysisAgent:
         url_ml_prob = 0.0
         if self.has_url_ml:
             try:
+                # ALGORITHM: TF-IDF + Support Vector Machine (SVM)
+                # Step 1: TF-IDF Vectorization - converts URL string to numerical features
                 features = self.url_vectorizer.transform([url])
-                # phishing.pkl is LogisticRegression
+                
+                # Step 2: SVM Classification - predicts maliciousness probability
+                # Uses probability calibration from phishing_new.pkl (SVM model)
                 url_ml_prob = self.url_ml_model.predict_proba(features)[0][1]
                 
                 # Hybrid Logic: Weight the ML model heavily if it has high confidence
@@ -104,11 +147,19 @@ class ExternalAnalysisAgent:
         return min(risk_score, 1.0), reasons, url_ml_prob
     
     def check_domain_similarity(self, url):
-        """Check if domain is similar to legitimate domains"""
+        """
+        Check if domain is similar to legitimate domains.
+        
+        ALGORITHM: Sequence Matching (Fuzzy String Similarity)
+        - Uses difflib.SequenceMatcher for string matching
+        - Detects homoglyph attacks: gogle.com vs google.com
+        - Returns similarity ratio (0-1 scale)
+        """
         domain = self.extract_domain(url)
         max_similarity = 0.0
         
         for legit_domain in self.legitimate_domains:
+            # SequenceMatcher.ratio(): compares two strings and returns similarity (0-1)
             similarity = SequenceMatcher(None, domain.lower(), legit_domain).ratio()
             max_similarity = max(max_similarity, similarity)
         
