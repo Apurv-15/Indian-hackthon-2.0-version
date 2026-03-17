@@ -137,8 +137,8 @@ export default function PoliciesPage() {
           {/* Header */}
           <header className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-4">
             <div className="space-y-1">
-              <h2 className="text-3xl font-bold text-white tracking-tight">Security Policies</h2>
-              <p className="text-slate-400">Configure the detection rules applied during threat analysis.</p>
+              <h2 className="text-3xl font-bold text-slate-900 tracking-tight">Security Policies</h2>
+              <p className="text-slate-600">Configure the detection rules applied during threat analysis.</p>
             </div>
             <motion.button
               onClick={handleSave}
@@ -160,10 +160,10 @@ export default function PoliciesPage() {
               <Lock className="w-6 h-6 text-[var(--color-primary)]" />
             </div>
             <div className="flex-1">
-              <p className="text-white font-semibold text-lg">
+              <p className="text-slate-900 font-semibold text-lg">
                 {enabledCount} of {POLICIES.length} policies active
               </p>
-              <p className="text-slate-400 text-sm">These rules guide the AI agents during threat analysis.</p>
+              <p className="text-slate-600 text-sm">These rules guide the AI agents during threat analysis.</p>
             </div>
             <div className="hidden sm:flex items-end gap-1 h-8">
               {POLICIES.map(p => (
@@ -178,8 +178,8 @@ export default function PoliciesPage() {
           </div>
 
           {/* Info note */}
-          <div className="flex items-start gap-3 p-4 rounded-xl bg-indigo-500/5 border border-indigo-500/20 text-sm text-slate-400">
-            <Info className="w-4 h-4 text-indigo-400 shrink-0 mt-0.5" />
+          <div className="flex items-start gap-3 p-4 rounded-xl bg-indigo-500/5 border border-indigo-500/20 text-sm text-slate-600">
+            <Info className="w-4 h-4 text-indigo-500 shrink-0 mt-0.5" />
             <p>
               Policy settings are stored locally on your device and inform the AI analysis prompt context.
               Enterprise deployments support server-side enforcement with audit logging.
