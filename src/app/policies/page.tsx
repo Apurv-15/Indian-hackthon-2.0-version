@@ -209,7 +209,7 @@ export default function PoliciesPage() {
                     </div>
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2 flex-wrap mb-1">
-                        <h3 className="text-sm font-semibold text-white">{policy.title}</h3>
+                        <h3 className="text-sm font-semibold text-slate-900">{policy.title}</h3>
                         <span className={`text-xs px-2 py-0.5 rounded-full border ${sev.bg} ${sev.color} ${sev.border}`}>
                           {sev.label}
                         </span>
@@ -217,7 +217,7 @@ export default function PoliciesPage() {
                           {policy.tag}
                         </span>
                       </div>
-                      <p className="text-xs text-slate-400 leading-relaxed">{policy.description}</p>
+                      <p className="text-xs text-slate-600 leading-relaxed">{policy.description}</p>
                     </div>
 
                     {/* Toggle switch */}
