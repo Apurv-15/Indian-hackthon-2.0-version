@@ -139,10 +139,10 @@ export default function Home() {
               <div className="w-16 h-16 bg-white shadow-sm border border-slate-200/60 rounded-3xl flex items-center justify-center mb-1">
                 <Shield className="w-8 h-8 text-[var(--color-primary)]" />
               </div>
-              <h2 className="text-3xl md:text-4xl font-bold text-slate-900 tracking-tight">
+              <h2 className="text-3xl md:text-4xl font-bold text-slate-800 tracking-tight">
                 Hey, I'm AegisAI.
               </h2>
-              <h3 className="text-lg md:text-xl text-slate-600 font-medium max-w-lg">
+              <h3 className="text-lg md:text-xl text-slate-500 font-medium max-w-lg">
                 Upload media or paste context below to begin the forensic analysis.
               </h3>
             </header>

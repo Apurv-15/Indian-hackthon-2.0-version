@@ -1,0 +1,20 @@
+/* Markers injected by AegisAI */
+.aegis-scan-marker {
+    transition: transform 0.2s cubic-bezier(0.1, 0.7, 1.0, 0.1);
+}
+
+.aegis-scan-marker:hover {
+    transform: scale(1.5) rotate(-10deg);
+}
+
+/* Animations for tooltips */
+@keyframes aegisFadeIn {
+    from { opacity: 0; transform: translateY(10px); }
+    to { opacity: 1; transform: translateY(0); }
+}
+
+#aegis-tooltip {
+    animation: aegisFadeIn 0.2s forwards;
+    pointer-events: none;
+    user-select: none;
+}

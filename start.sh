@@ -1,8 +1,16 @@
-#!/bin/bash
 
 # Configuration
 PROJECT_ROOT=$(pwd)
-PYTHON_EXECUTABLE="$PROJECT_ROOT/.venv/Scripts/python"
+
+# Detect Python executable
+if [ -f "$PROJECT_ROOT/.venv/bin/python" ]; then
+    PYTHON_EXECUTABLE="$PROJECT_ROOT/.venv/bin/python"
+elif [ -f "$PROJECT_ROOT/venv/bin/python" ]; then
+    PYTHON_EXECUTABLE="$PROJECT_ROOT/venv/bin/python"
+else
+    PYTHON_EXECUTABLE="python3"
+fi
+
 BRIDGE_SCRIPT="$PROJECT_ROOT/ai_agent/bridge.py"
 PORT=5001
 
@@ -10,8 +18,10 @@ echo "🛡️ Starting AegisAI Integrated System..."
 
 # 1. Start Python Bridge in the background
 echo "🚀 Launching AI Inference Engine..."
+export HF_HUB_OFFLINE=1
+export TRANSFORMERS_OFFLINE=1
 cd "$PROJECT_ROOT/ai_agent"
-$PYTHON_EXECUTABLE bridge.py > bridge.log 2>&1 &
+"$PYTHON_EXECUTABLE" bridge.py > bridge.log 2>&1 &
 BRIDGE_PID=$!
 
 # Function to kill bridge on exit
