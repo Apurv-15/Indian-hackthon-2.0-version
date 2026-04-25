@@ -15,13 +15,9 @@ sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 from flask import Flask, request, jsonify
 from flask_cors import CORS
 from app import system
-import io
-
-# Fix encoding issue for some environments
-sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8')
 
 app = Flask(__name__)
-CORS(app) # Enable CORS for all routes
+CORS(app) # Allow cross-origin requests from the browser extension
 
 
 @app.route("/health", methods=["GET"])
@@ -49,7 +45,7 @@ def analyze():
             "threatType": ", ".join(result["threat_types"]),
             "confidenceScore": round(result["confidence"] * 100, 1),
             "riskScore": round(result["risk_score"], 4),
-            "explanation": " ".join(result["explanation"]["reasons"]),
+            "explanation": " ".join([r.split(" — helper:")[0] for r in result["explanation"]["reasons"]]),
             "indicators": result["explanation"]["reasons"],
             "recommendations": result["explanation"]["actions"],
             "detailedScores": {
@@ -74,6 +70,5 @@ def analyze():
 
 
 if __name__ == "__main__":
-    port = int(os.environ.get("PORT", 5001))
-    print(f"🚀 AegisAI Python bridge running on http://0.0.0.0:{port}")
-    app.run(host="0.0.0.0", port=port, debug=False)
+    print("🚀 AegisAI Python bridge running on http://localhost:5001")
+    app.run(host="127.0.0.1", port=5001, debug=False)

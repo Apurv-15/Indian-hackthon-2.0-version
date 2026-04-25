@@ -1,0 +1,178 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <title>AegisAI Phishing Shield</title>
+  <style>
+    :root {
+      --bg: #0a0f1e;
+      --card: #151c33;
+      --primary: #4f67ff;
+      --text: #ffffff;
+      --subtext: #94a3b8;
+      --safe: #4ade80;
+      --medium: #fbbf24;
+      --high: #ef4444;
+    }
+
+    body {
+      width: 320px;
+      margin: 0;
+      padding: 0;
+      background: var(--bg);
+      color: var(--text);
+      font-family: 'Inter', -apple-system, sans-serif;
+    }
+
+    .container {
+      padding: 20px;
+    }
+
+    header {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      margin-bottom: 24px;
+    }
+
+    .logo {
+      width: 32px;
+      height: 32px;
+    }
+
+    h1 {
+      margin: 0;
+      font-size: 18px;
+      background: linear-gradient(135deg, #fff 0%, #94a3b8 100%);
+      -webkit-background-clip: text;
+      background-clip: text;
+      -webkit-text-fill-color: transparent;
+    }
+
+    .status-card {
+      background: var(--card);
+      border-radius: 12px;
+      padding: 16px;
+      border: 1px solid rgba(255, 255, 255, 0.05);
+      margin-bottom: 16px;
+    }
+
+    .status-label {
+      font-size: 12px;
+      color: var(--subtext);
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      margin-bottom: 8px;
+    }
+
+    .status-value {
+      font-size: 1.25rem;
+      font-weight: 600;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .badge {
+      padding: 2px 8px;
+      border-radius: 4px;
+      font-size: 11px;
+      background: rgba(74, 222, 128, 0.1);
+      color: var(--safe);
+    }
+
+    .features {
+      list-style: none;
+      padding: 0;
+      margin: 0;
+    }
+
+    .feature-item {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      margin-bottom: 12px;
+      font-size: 13px;
+      color: var(--subtext);
+    }
+
+    .icon-box {
+      width: 20px;
+      height: 20px;
+      background: rgba(79, 103, 255, 0.1);
+      border-radius: 4px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: var(--primary);
+    }
+
+    footer {
+      border-top: 1px solid rgba(255, 255, 255, 0.05);
+      padding: 12px 20px;
+      background: rgba(0,0,0,0.2);
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      font-size: 11px;
+      color: var(--subtext);
+    }
+
+    button {
+      background: var(--primary);
+      color: white;
+      border: none;
+      padding: 8px 16px;
+      border-radius: 8px;
+      cursor: pointer;
+      font-size: 12px;
+      font-weight: 500;
+      transition: opacity 0.2s;
+    }
+
+    button:hover {
+      opacity: 0.9;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <header>
+      <img src="icons/icon48.png" class="logo">
+      <h1>AegisAI Shield</h1>
+    </header>
+
+    <div class="status-card">
+      <div class="status-label">Global Protection</div>
+      <div class="status-value">
+        <span id="status-indicator">●</span> ACTIVE
+        <span class="badge">V1.0</span>
+      </div>
+    </div>
+
+    <ul class="features">
+      <li class="feature-item">
+        <div class="icon-box">🛡️</div>
+        Real-time Link Scanner
+      </li>
+      <li class="feature-item">
+        <div class="icon-box">🔍</div>
+        Deep Content Analysis
+      </li>
+      <li class="feature-item">
+        <div class="icon-box">🧠</div>
+        ML Confidence Scoring
+      </li>
+    </ul>
+
+    <div style="margin-top: 20px; display: flex; gap: 8px;">
+        <button id="scan-page" style="flex: 1;">Scan Entire Page</button>
+    </div>
+  </div>
+  <footer>
+    <span>localhost:5001 connected</span>
+    <span>v1.0.0</span>
+  </footer>
+  <script src="popup.js"></script>
+</body>
+</html>

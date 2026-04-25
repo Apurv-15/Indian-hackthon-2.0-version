@@ -175,7 +175,7 @@ export default function EmailsPage() {
     if (lower.startsWith('sender spoofing')) return '👤';
     if (lower.startsWith('content analysis')) return '📝';
     if (lower.startsWith('behavioral threat')) return '⚠️';
-    if (lower.startsWith('prompt injection')) return '💉';
+    if (lower.startsWith('prompt injection') || lower.startsWith('ai safety')) return '🛡️';
     if (lower.startsWith('hidden threat')) return '🕵️';
     return '🔍';
   };
@@ -337,32 +337,56 @@ export default function EmailsPage() {
                 </div>
 
                 <div>
-                  <h4 className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-3 flex items-center gap-2">
+                  <h4 className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-4 flex items-center gap-2">
                     <Info className="w-3.5 h-3.5" />
                     Explainable Reasoning
                   </h4>
-                  <p className="text-sm text-slate-600 leading-relaxed bg-slate-50/50 p-4 rounded-2xl border border-slate-100 mb-6">
-                    {selectedEmail.analysis.explanation}
-                  </p>
-
-                  <h4 className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-3 flex items-center gap-2">
-                    <Search className="w-3.5 h-3.5" />
-                    Key Indicators
-                  </h4>
-                  {selectedEmail.analysis.indicators?.length > 0 ? (
-                    <ul className="space-y-3">
-                      {selectedEmail.analysis.indicators.map((indicator, idx) => (
-                        <li key={idx} className="flex items-start gap-2.5 text-xs text-slate-600 font-medium bg-slate-50/70 border border-slate-100 rounded-xl p-3">
-                          <span className="text-base shrink-0 mt-[-1px]">{getIndicatorIcon(indicator)}</span>
-                          <span className="leading-relaxed">{indicator}</span>
-                        </li>
-                      ))}
-                    </ul>
-                  ) : (
-                    <p className="text-sm text-slate-400 italic px-2">
-                      No specific behavioral signals detected.
-                    </p>
-                  )}
+                  
+                  <div className="space-y-4">
+                    {selectedEmail.analysis.indicators?.length > 0 ? (
+                      selectedEmail.analysis.indicators.map((indicator, idx) => {
+                        // Parse "Category: Title — helper:Explanation"
+                        const [header, fullExplanation] = indicator.split(' — helper:');
+                        const [category, title] = header.split(': ');
+                        const explanation = fullExplanation || '';
+                        
+                        return (
+                          <motion.div 
+                            key={idx}
+                            initial={{ opacity: 0, y: 10 }}
+                            animate={{ opacity: 1, y: 0 }}
+                            transition={{ delay: idx * 0.1 }}
+                            className="bg-slate-50 border border-slate-100 rounded-2xl p-4 shadow-sm group hover:border-blue-200 transition-colors"
+                          >
+                            <div className="flex items-center gap-3 mb-2">
+                              <div className="w-8 h-8 rounded-lg bg-white border border-slate-200 flex items-center justify-center text-lg shadow-sm">
+                                {getIndicatorIcon(indicator)}
+                              </div>
+                              <div>
+                                <p className="text-[10px] font-black uppercase tracking-tighter text-blue-500/60 leading-none mb-1">
+                                  {category || 'Analysis'}
+                                </p>
+                                <h5 className="text-sm font-bold text-slate-800 leading-none">
+                                  {title || indicator.split(' —')[0] || indicator}
+                                </h5>
+                              </div>
+                            </div>
+                            {explanation && (
+                              <p className="text-xs text-slate-500 font-medium leading-relaxed pl-11">
+                                {explanation}
+                              </p>
+                            )}
+                          </motion.div>
+                        );
+                      })
+                    ) : (
+                      <div className="bg-slate-50 border border-slate-100 rounded-2xl p-6 text-center">
+                        <p className="text-sm text-slate-400 italic">
+                          No specific risk signals detected. This email follows standard safe patterns.
+                        </p>
+                      </div>
+                    )}
+                  </div>
                 </div>
               </div>
 
