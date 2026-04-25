@@ -1,0 +1,49 @@
+const API_URL = "http://localhost:5001/analyze";
+const cache = new Map();
+
+chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
+  if (request.action === "analyze") {
+    const input = request.input;
+    if (cache.has(input)) {
+        console.log("Serving from cache:", input);
+        sendResponse(cache.get(input));
+        return true;
+    }
+
+    fetch(API_URL, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({ input: input })
+    })
+    .then(response => response.json())
+    .then(data => {
+      cache.set(input, data);
+      sendResponse(data);
+    })
+    .catch(error => {
+      console.error("API error:", error);
+      sendResponse({ error: "API unreachable. Make sure the backend bridge is running." });
+    });
+    return true; // Keep message channel open for async response
+  }
+});
+
+// Context menu for manual scanning
+chrome.runtime.onInstalled.addListener(() => {
+  chrome.contextMenus.create({
+    id: "analyze-text",
+    title: "Analyze for Phishing Risk",
+    contexts: ["selection", "link"]
+  });
+});
+
+chrome.contextMenus.onClicked.addListener((info, tab) => {
+  if (info.menuItemId === "analyze-text") {
+    const textToAnalyze = info.selectionText || info.linkUrl;
+    if (textToAnalyze) {
+        chrome.tabs.sendMessage(tab.id, { action: "showModal", text: textToAnalyze });
+    }
+  }
+});
