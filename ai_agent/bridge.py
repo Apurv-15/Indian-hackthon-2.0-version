@@ -13,9 +13,11 @@ sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8')
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 
 from flask import Flask, request, jsonify
+from flask_cors import CORS
 from app import system
 
 app = Flask(__name__)
+CORS(app) # Allow cross-origin requests from the browser extension
 
 
 @app.route("/health", methods=["GET"])

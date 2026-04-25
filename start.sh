@@ -18,6 +18,8 @@ echo "🛡️ Starting AegisAI Integrated System..."
 
 # 1. Start Python Bridge in the background
 echo "🚀 Launching AI Inference Engine..."
+export HF_HUB_OFFLINE=1
+export TRANSFORMERS_OFFLINE=1
 cd "$PROJECT_ROOT/ai_agent"
 "$PYTHON_EXECUTABLE" bridge.py > bridge.log 2>&1 &
 BRIDGE_PID=$!
