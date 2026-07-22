@@ -5,6 +5,8 @@ The Next.js API route calls http://localhost:5001/analyze.
 """
 import os, sys, warnings
 os.environ["TOKENIZERS_PARALLELISM"] = "false"
+os.environ["OMP_NUM_THREADS"] = "1"
+os.environ["MKL_NUM_THREADS"] = "1"
 warnings.filterwarnings("ignore")
 
 import io

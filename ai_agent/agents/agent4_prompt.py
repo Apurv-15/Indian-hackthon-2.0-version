@@ -21,11 +21,23 @@ class PromptInjectionAgent:
         print("Loading Prompt Injection Agent (MNLI-based)...")
         self.threshold = threshold
 
-        # Load tokenizer and model
-        self.tokenizer = AutoTokenizer.from_pretrained(model_name)
-        self.model = AutoModelForSequenceClassification.from_pretrained(model_name)
-        self.model.eval()  # inference mode
-        print("✓ Model loaded successfully")
+        # Detection of Device
+        if torch.cuda.is_available():
+            self.device = torch.device("cuda")
+            gpu_name = torch.cuda.get_device_name(0)
+            print(f"🚀 CUDA detected! Using GPU: {gpu_name} for Prompt Injection Agent.")
+        elif torch.backends.mps.is_available():
+            self.device = torch.device("mps")
+            print("🚀 Apple Silicon detected! Using MPS for Prompt Injection Agent.")
+        else:
+            self.device = torch.device("cpu")
+            print("⚠️ CUDA not found for Prompt Injection Agent. Using CPU.")
+
+        # Bypassing the transformer model to avoid Windows CPU deadlocks.
+        # We will rely entirely on the rule-based regex patterns.
+        self.tokenizer = None
+        self.model = None
+        print("✓ Rule-based engine loaded (Transformer bypassed for stability)")
 
         # Rule‑based patterns (covers common jailbreak attempts)
         self.injection_patterns = [
@@ -77,21 +89,24 @@ class PromptInjectionAgent:
                 attack_categories.append(category)
 
         # -------------------- Transformer inference --------------------
-        # Tokenize
-        inputs = self.tokenizer(
-            text,
-            return_tensors="pt",
-            truncation=True,
-            max_length=512,
-            padding=True
-        )
+        if self.model is not None and self.tokenizer is not None:
+            # Tokenize
+            inputs = self.tokenizer(
+                text,
+                return_tensors="pt",
+                truncation=True,
+                max_length=512,
+                padding=True
+            ).to(self.device)
 
-        with torch.no_grad():
-            outputs = self.model(**inputs)
-            probs = torch.nn.functional.softmax(outputs.logits, dim=-1)
+            with torch.no_grad():
+                outputs = self.model(**inputs)
+                probs = torch.nn.functional.softmax(outputs.logits, dim=-1)
 
-        # MNLI classes: 0 = entailment, 1 = neutral, 2 = contradiction
-        contradiction_prob = probs[0][2].item()
+            # MNLI classes: 0 = entailment, 1 = neutral, 2 = contradiction
+            contradiction_prob = probs[0][2].item()
+        else:
+            contradiction_prob = 0.0
 
         # -------------------- Combine scores --------------------
         # 70% weight on contradiction probability, 30% on rule‑based
