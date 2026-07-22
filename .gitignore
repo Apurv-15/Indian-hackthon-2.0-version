@@ -9,3 +9,9 @@ coverage/
 !.env.example
 generateToken.cjs
 exchangeToken.cjs
+.venv/
+__pycache__/
+*.pyc
+inference_cache.json
+.vscode/
+scratch/
