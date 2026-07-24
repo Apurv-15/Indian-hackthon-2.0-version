@@ -90,11 +90,11 @@ def finetuned_deberta():
     tokenizer = AutoTokenizer.from_pretrained(model_name, use_fast=False)
     
     def tokenize_function(examples):
-        return tokenizer(examples['text'], truncation=True, padding='max_length', max_length=256)
+        return tokenizer(examples['text'], truncation=True, padding='max_length', max_length=128)
     
     # Limit dataset size for quick fine-tuning (agent environment)
-    # 2000 samples is enough to adapt
-    train_subset = combined_df.head(2000)
+    # 200 samples is enough to adapt when backbone is frozen
+    train_subset = combined_df.head(200)
     dataset = Dataset.from_pandas(train_subset)
     dataset = dataset.rename_column("target", "label")
     tokenized_ds = dataset.map(tokenize_function, batched=True)
@@ -121,7 +121,6 @@ def finetuned_deberta():
         per_device_train_batch_size=8,
         weight_decay=0.01,
         logging_dir="./logs",
-        use_mps_device=torch.backends.mps.is_available(),
         save_strategy="no", # Save manually to models dir
         eval_strategy="no",
         report_to="none"
@@ -188,8 +187,42 @@ def train_text_scikit():
     
     print("Scikit text model updated and saved as model_new.pkl")
 
+def train_uci_model():
+    print("\n--- Training UCI Phishing Websites Model ---")
+    try:
+        from ucimlrepo import fetch_ucirepo
+        from sklearn.ensemble import RandomForestClassifier
+        
+        phishing_websites = fetch_ucirepo(id=327)
+        X = phishing_websites.data.features
+        y = phishing_websites.data.targets
+        
+        # Map target: 1 -> 1 (phishing), -1 -> 0 (benign)
+        y_mapped = (y.iloc[:, 0] == 1).astype(int)
+        
+        # Train-test split for evaluation
+        X_train, X_test, y_train, y_test = train_test_split(X, y_mapped, test_size=0.2, random_state=42)
+        
+        eval_model = RandomForestClassifier(n_estimators=100, random_state=42)
+        eval_model.fit(X_train.values, y_train)
+        y_pred = eval_model.predict(X_test.values)
+        acc = accuracy_score(y_test, y_pred)
+        print(f"UCI Model Validation Accuracy (80/20 split): {acc:.4%}")
+        
+        # Train on full dataset
+        model = RandomForestClassifier(n_estimators=100, random_state=42)
+        model.fit(X.values, y_mapped)
+        
+        # Save model
+        with open(os.path.join(MODEL_DIR, 'phishing_uci_model.pkl'), 'wb') as f:
+            pickle.dump(model, f)
+        print("UCI model trained and saved as phishing_uci_model.pkl")
+    except Exception as e:
+        print(f"Failed to train UCI model: {e}")
+
 if __name__ == "__main__":
     train_url_model()
     train_text_scikit()
-    # finetuned_deberta() # Disabled by default due to high CPU execution time in standard runs
+    train_uci_model()
+    finetuned_deberta() # Enabled to train DeBERTa model and increase accuracy
     print("\n✅ Multi-Agent system updated with new knowledge from local datasets.")
