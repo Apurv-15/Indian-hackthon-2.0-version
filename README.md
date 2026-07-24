@@ -1,149 +1,126 @@
-# AegisAI - Gmail Threat Email Dashboard
+# 🛡️ AegisAI - Multi-Agent Threat Detection & Phishing Shield
 
-This project is a Next.js (App Router) dashboard that reads emails from a Gmail inbox using the Gmail API and displays them as threat-monitoring cards.
+AegisAI is a premium, real-time threat-monitoring and phishing prevention system. It features a Next.js threat dashboard, a Flask-based Python inference bridge serving multi-agent models, and a high-performance browser extension that intercepts and analyzes links instantly.
 
-## Features
+---
 
-- Fetches latest 10 emails from Gmail inbox via backend route
-- Uses Google OAuth2 (refresh token flow) on the server side
-- Shows sender, subject, preview snippet, and received time
-- Dashboard auto-refreshes every 10 seconds
-- Tailwind-styled email cards and dashboard UI
+## 🚀 High-Performance Browser Extension
 
-## Project Structure
+The AegisAI browser extension provides **on-the-fly, zero-latency phishing protection** as you browse. 
 
-```text
-src/
-	app/
-		api/
-			emails/
-				route.js          # Gmail API backend endpoint
-		dashboard/
-			page.js             # Frontend dashboard
-	components/
-		EmailCard.js          # Reusable email card UI
+### ⚡ Sub-Millisecond Scraping & Speed Features
+- **Event-Driven Scraping**: The extension hooks into page-level `mouseover` (hover) and `click` events using capture-phase event listeners. Scraping is triggered automatically *only* when users interact with links, avoiding unnecessary bulk scraping or page performance degradation.
+- **Background Async Analysis**: When a link is hovered, a non-blocking asynchronous request is dispatched to the service worker (`background.js`), which queries the backend. The UI remains fully responsive.
+- **Sub-Millisecond Cache**: A local in-memory cache (`Map`) in the background script stores previous analysis verdicts. Repeated hover/click actions on the same URL are resolved in **0ms** without hitting the network or backend.
+- **Batch Scanning (`scanAllLinks`)**: Allows users to scan all links on a webpage with a single click, appending risk badges directly onto target page anchors.
+- **Active Click Interception**: If a link is flagged as **HIGH RISK**, the extension blocks navigation in the capture phase, requiring explicit user confirmation before navigating.
+
+---
+
+## 🧠 Multi-Agent Risk Scoring Engine
+
+The backend relies on a **4-Agent Ensemble System** combining legacy machine learning models (fast & interpretable) and modern Deep Learning Transformers (highly semantic).
+
+```
+User Input / Link 
+      │
+      ▼
+┌─────────────────────────────────────────────────────────┐
+│              Preprocessed & Tokenized                   │
+└─────────────────────────┬───────────────────────────────┘
+                          │ (Parallel Execution)
+     ┌────────────────────┼────────────────────┐
+     ▼                    ▼                    ▼
+┌──────────────┐     ┌──────────────┐     ┌──────────────┐
+│   Agent 1    │     │   Agent 2    │     │   Agent 4    │
+│ External/URL │     │   Content    │     │ Prompt Inj.  │
+│ (SVM, Cosine)│     │ (NB, DeBERTa)│     │(DeBERTa-MNLI)│
+└──────┬───────┘     └──────┬───────┘     └──────┬───────┘
+       │                    │                    │
+       └───────────┐        │        ┌───────────┘
+                   ▼        ▼        ▼
+             ┌──────────────────────────┐
+             │         Agent 3          │
+             │    Synthesizer Agent     │ (Weighted Ensemble Score)
+             └──────────────┬───────────┘
+                            ▼
+                    [Final Threat Report]
 ```
 
-## 1. Prerequisites
+### The 4-Agent Breakdown
+1. **Agent 1 (External Analyst)**: Uses **SVM + TF-IDF**, **SequenceMatcher** (fuzzy string matching), Cosine Similarity, and regex heuristics to compute `url_risk` and spot domain spoofing (homoglyph/typosquatting).
+2. **Agent 2 (Content Analyst)**: Uses a hybrid ensemble of **Multinomial Naive Bayes / Logistic Regression** (30%) + **DeBERTa-v3-Small** (70%), along with **DistilBERT** for urgency/threat sentiment and **MiniLM-L6-v2** embeddings to check text-to-URL semantic divergence.
+3. **Agent 4 (Prompt Injection Detector)**: Leverages a fine-tuned **DeBERTa-v3 MNLI** model paired with rule-based heuristics (70% model + 30% rules) to detect prompt injection/jailbreak attempts.
+4. **Agent 3 (Synthesizer)**: Combines individual scores using a weighted consensus logic.
 
-- Node.js 18+
-- pnpm (recommended) or npm
-- A Google account (example: cyberthreatscanner@gmail.com)
-- Google Cloud project with Gmail API enabled
+### ⚖️ Weighted Scoring Algorithm & Multipliers
+The Synthesizer (`Agent 3`) aggregates scores based on the following model weights:
 
-## 2. Install Dependencies
+| Threat Category | Weight | Description |
+| :--- | :--- | :--- |
+| **Phishing Probability** | `0.40` | Overall semantic phishing likelihood |
+| **URL Risk** | `0.30` | Heuristics & ML evaluations of the target link |
+| **Prompt Injection** | `0.30` | Malicious prompt hijack attempts (High impact) |
+| **Spam Probability** | `0.15` | Mass mail content indicators |
+| **AI-Generated Content** | `0.10` | Automated scam copy generation markers |
+| **Domain Similarity** | `0.05` | Likelihood of brand typosquatting or impersonation |
 
-From project root:
+#### 🛡️ Adjustments & Multipliers:
+- **Trust Multiplier (`0.5x`)**: If the domain matches a trusted whitelist, content-based threats (phishing, spam, AI content) are scaled down by half to prevent false positives.
+- **Semantic Divergence Penalty**: If there is a mismatch between the link text and the destination URL (e.g., text says "PayPal Log In" but destination is "scam-domain.xyz"), a penalty is applied, increasing the risk score by up to `0.20`.
+- **Urgency/Hostility Booster**: If an aggressive or high-pressure tone is detected via sentiment analysis, the threat score receives a `+0.10` bump.
+- **Safety override**: Any detected prompt injection immediately overrides the score to a minimum of `0.70` (High Risk).
 
+#### 📊 Risk Classification:
+- **HIGH RISK**: Score $\ge 0.8$ 🔴 (Blocks navigation and issues modal warnings)
+- **MEDIUM RISK**: Score $\ge 0.5$ 🟠
+- **LOW RISK**: Score $\ge 0.22$ 🟡
+- **MINIMAL/SAFE**: Score $< 0.22$ 🟢
+
+---
+
+## 🛠️ Technology Stack
+
+- **Frontend**: Next.js 15 (App Router), React, TailwindCSS, Lucide Icons
+- **Backend Bridge**: Python 3.10+, Flask, Flask-CORS, Gradio
+- **Machine Learning**: HuggingFace Transformers (`deberta-v3`, `distilbert`, `minilm`), Scikit-Learn (`MultinomialNB`, `SGDClassifier`, `TF-IDF`), PyTorch
+- **Browser Extension**: Manifest V3, Web Extensions API, Chrome Storage, Service Workers
+
+---
+
+## 📦 Getting Started
+
+### 1. Prerequisites
+- Node.js 18+ & `npm`/`pnpm`
+- Python 3.10+
+- A Google Cloud Project with the Gmail API enabled (for dashboard integration)
+
+### 2. Installation
+Clone the repository and install the Next.js dependencies:
 ```bash
 pnpm install
 ```
 
-If you use npm instead:
-
+Install the Python backend dependencies:
 ```bash
-npm install
+pip install -r requirements.txt
 ```
 
-The project requires `googleapis` for Gmail integration.
+### 3. Running the System
 
-## 3. Google Cloud Setup (Gmail API)
-
-1. Go to Google Cloud Console.
-2. Create or select a project.
-3. Enable **Gmail API** for that project.
-4. Configure OAuth consent screen.
-5. Create OAuth 2.0 Client ID credentials.
-6. Add a redirect URI (for example: `http://localhost:3000/oauth2callback`).
-7. Generate a refresh token for your Gmail account.
-
-You need these values:
-
-- `GMAIL_CLIENT_ID`
-- `GMAIL_CLIENT_SECRET`
-- `GMAIL_REDIRECT_URI`
-- `GMAIL_REFRESH_TOKEN`
-- `GMAIL_USER_EMAIL`
-
-## 4. Create Environment Variables
-
-Create a `.env.local` file in the root:
-
-```env
-GMAIL_CLIENT_ID=your_google_client_id
-GMAIL_CLIENT_SECRET=your_google_client_secret
-GMAIL_REDIRECT_URI=http://localhost:3000/oauth2callback
-GMAIL_REFRESH_TOKEN=your_refresh_token
-GMAIL_USER_EMAIL=cyberthreatscanner@gmail.com
+Start the Flask bridge server (loads the AI models into memory once for low-latency inference):
+```bash
+python ai_agent/bridge.py
 ```
 
-Important:
-
-- Do not commit `.env.local` to git.
-- Values must match the same Google Cloud OAuth client setup.
-
-## 5. Run the App
-
+Start the Next.js threat dashboard:
 ```bash
 pnpm dev
 ```
 
-Open:
-
-- `http://localhost:3000/dashboard`
-
-## 6. API Endpoint
-
-Backend route:
-
-- `GET /api/emails`
-
-Returns JSON like:
-
-```json
-[
-	{
-		"from": "example@gmail.com",
-		"subject": "Verify your account",
-		"snippet": "Click this link to verify...",
-		"time": "2026-03-16T10:00:00.000Z"
-	}
-]
-```
-
-## 7. How Auto-Refresh Works
-
-The dashboard page polls `/api/emails` every 10 seconds using `setInterval`, so new inbox emails appear automatically without manual refresh.
-
-## 8. Troubleshooting
-
-### `Missing Gmail OAuth environment variables`
-
-- Confirm `.env.local` exists at project root.
-- Restart dev server after changing environment variables.
-
-### `Failed to fetch emails from Gmail API`
-
-- Verify Gmail API is enabled in Google Cloud.
-- Verify refresh token is valid and not revoked.
-- Ensure `GMAIL_USER_EMAIL` is the same account used in OAuth consent.
-
-### Dependency install issues
-
-- Prefer `pnpm install` in this repo because it already uses `pnpm-lock.yaml`.
-- If a package install fails, remove `node_modules` and reinstall.
-
-## 9. Security Notes
-
-- Keep OAuth secrets private.
-- Rotate refresh tokens if exposure is suspected.
-- For production, store secrets in a secure secret manager, not in source files.
-
-## 10. Quick Start Summary
-
-1. `pnpm install`
-2. Configure Gmail API in Google Cloud
-3. Add `.env.local` with Gmail OAuth values
-4. `pnpm dev`
-5. Open `/dashboard`
-
+### 4. Installing the Browser Extension
+1. Open Chrome and navigate to `chrome://extensions/`.
+2. Enable **Developer mode** (top-right toggle).
+3. Click **Load unpacked** (top-left).
+4. Select the `extension` folder inside this repository.
+5. Hover over any link or right-click to analyze suspicious content!
