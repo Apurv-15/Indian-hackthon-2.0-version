@@ -2,6 +2,8 @@ import pandas as pd
 import os
 import pickle
 import torch
+import io
+import sys
 from sklearn.linear_model import LogisticRegression
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.model_selection import train_test_split
@@ -14,6 +16,12 @@ from transformers import (
     DataCollatorWithPadding
 )
 from datasets import Dataset
+
+# Fix encoding issue for Windows environment when printing emojis
+if sys.stdout.encoding != 'utf-8':
+    sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8')
+if sys.stderr.encoding != 'utf-8':
+    sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding='utf-8')
 
 # Setup paths
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -31,10 +39,23 @@ def train_url_model():
     X = df['url']
     y = df['label']
     
+    # Evaluate accuracy using train-test split (80/20)
+    X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
+    
+    eval_vectorizer = TfidfVectorizer(max_features=5000)
+    X_train_vec = eval_vectorizer.fit_transform(X_train)
+    X_test_vec = eval_vectorizer.transform(X_test)
+    
+    eval_model = LogisticRegression(max_iter=1000)
+    eval_model.fit(X_train_vec, y_train)
+    
+    y_pred = eval_model.predict(X_test_vec)
+    acc = accuracy_score(y_test, y_pred)
+    print(f"URL Model Validation Accuracy (80/20 split): {acc:.4%}")
+    
+    # Train on full dataset for maximum performance in production
     vectorizer = TfidfVectorizer(max_features=5000)
     X_vec = vectorizer.fit_transform(X)
-    
-    # Simple Logistic Regression for speed and consistency with current agent
     model = LogisticRegression(max_iter=1000)
     model.fit(X_vec, y)
     
@@ -53,10 +74,8 @@ def finetuned_deberta():
     # Phishing Emails
     df_phish = pd.read_csv(os.path.join(DATA_DIR, 'phishing_email_dataset.csv'))
     df_phish = df_phish[['text', 'label']].rename(columns={'label': 'target'})
-    # Assuming label column in phishing is descriptive, map it (Adjust based on distribution)
-    # Based on preview, it might be 1 for phishing, 0 for benign or text labels
-    # We'll treat all texts in phishing_email_dataset as phishing (1) if they aren't explicitly 0
-    df_phish['target'] = 1 
+    # FIX: Correctly map phishing and legitimate labels
+    df_phish['target'] = df_phish['target'].map({'phishing': 1, 'legitimate': 0})
     
     # Spam Dataset
     df_spam = pd.read_csv(os.path.join(DATA_DIR, 'spam_detection_dataset.csv'))
@@ -64,25 +83,36 @@ def finetuned_deberta():
     df_spam = df_spam[['text', 'target']]
     
     # Combine
-    combined_df = pd.concat([df_phish, df_spam]).dropna().sample(frac=1).reset_index(drop=True)
+    combined_df = pd.concat([df_phish, df_spam]).dropna().sample(frac=1, random_state=42).reset_index(drop=True)
     
     # 2. Tokenization
     model_name = "microsoft/deberta-v3-small"
     tokenizer = AutoTokenizer.from_pretrained(model_name, use_fast=False)
     
     def tokenize_function(examples):
-        return tokenizer(examples['text'], truncation=True, padding='max_length', max_length=256)
+        return tokenizer(examples['text'], truncation=True, padding='max_length', max_length=128)
     
     # Limit dataset size for quick fine-tuning (agent environment)
-    # 2000 samples is enough to adapt
-    train_subset = combined_df.head(2000)
+    # 200 samples is enough to adapt when backbone is frozen
+    train_subset = combined_df.head(200)
     dataset = Dataset.from_pandas(train_subset)
     dataset = dataset.rename_column("target", "label")
     tokenized_ds = dataset.map(tokenize_function, batched=True)
     
     # 3. Model Setup
-    device = "mps" if torch.backends.mps.is_available() else "cpu"
+    device = "cuda" if torch.cuda.is_available() else "mps" if torch.backends.mps.is_available() else "cpu"
     model = AutoModelForSequenceClassification.from_pretrained(model_name, num_labels=2).to(device)
+    
+    # Freeze the backbone DeBERTa layers to speed up CPU training significantly
+    print("Freezing DeBERTa backbone for faster training/fine-tuning...")
+    for name, param in model.named_parameters():
+        if "classifier" not in name:
+            param.requires_grad = False
+            
+    # Print trainable parameters summary
+    trainable_params = sum(p.numel() for p in model.parameters() if p.requires_grad)
+    total_params = sum(p.numel() for p in model.parameters())
+    print(f"Trainable parameters: {trainable_params:,} / {total_params:,}")
     
     # 4. Training
     training_args = TrainingArguments(
@@ -91,8 +121,8 @@ def finetuned_deberta():
         per_device_train_batch_size=8,
         weight_decay=0.01,
         logging_dir="./logs",
-        use_mps_device=torch.backends.mps.is_available(),
         save_strategy="no", # Save manually to models dir
+        eval_strategy="no",
         report_to="none"
     )
     
@@ -116,7 +146,8 @@ def train_text_scikit():
     # Phishing Emails
     df_phish = pd.read_csv(os.path.join(DATA_DIR, 'phishing_email_dataset.csv'))
     df_phish = df_phish[['text', 'label']].rename(columns={'label': 'target'})
-    df_phish['target'] = 1 
+    # FIX: Correctly map phishing and legitimate labels instead of setting all to 1
+    df_phish['target'] = df_phish['target'].map({'phishing': 1, 'legitimate': 0})
     
     # Spam Dataset
     df_spam = pd.read_csv(os.path.join(DATA_DIR, 'spam_detection_dataset.csv'))
@@ -128,6 +159,21 @@ def train_text_scikit():
     X = combined_df['text']
     y = combined_df['target']
     
+    # Evaluate accuracy using train-test split (80/20)
+    X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
+    
+    eval_vectorizer = TfidfVectorizer(max_features=5000)
+    X_train_vec = eval_vectorizer.fit_transform(X_train)
+    X_test_vec = eval_vectorizer.transform(X_test)
+    
+    eval_model = LogisticRegression(max_iter=1000)
+    eval_model.fit(X_train_vec, y_train)
+    
+    y_pred = eval_model.predict(X_test_vec)
+    acc = accuracy_score(y_test, y_pred)
+    print(f"Text Scikit Model Validation Accuracy (80/20 split): {acc:.4%}")
+    
+    # Train on full dataset for maximum performance in production
     vectorizer = TfidfVectorizer(max_features=5000)
     X_vec = vectorizer.fit_transform(X)
     
@@ -141,8 +187,42 @@ def train_text_scikit():
     
     print("Scikit text model updated and saved as model_new.pkl")
 
+def train_uci_model():
+    print("\n--- Training UCI Phishing Websites Model ---")
+    try:
+        from ucimlrepo import fetch_ucirepo
+        from sklearn.ensemble import RandomForestClassifier
+        
+        phishing_websites = fetch_ucirepo(id=327)
+        X = phishing_websites.data.features
+        y = phishing_websites.data.targets
+        
+        # Map target: 1 -> 1 (phishing), -1 -> 0 (benign)
+        y_mapped = (y.iloc[:, 0] == 1).astype(int)
+        
+        # Train-test split for evaluation
+        X_train, X_test, y_train, y_test = train_test_split(X, y_mapped, test_size=0.2, random_state=42)
+        
+        eval_model = RandomForestClassifier(n_estimators=100, random_state=42)
+        eval_model.fit(X_train.values, y_train)
+        y_pred = eval_model.predict(X_test.values)
+        acc = accuracy_score(y_test, y_pred)
+        print(f"UCI Model Validation Accuracy (80/20 split): {acc:.4%}")
+        
+        # Train on full dataset
+        model = RandomForestClassifier(n_estimators=100, random_state=42)
+        model.fit(X.values, y_mapped)
+        
+        # Save model
+        with open(os.path.join(MODEL_DIR, 'phishing_uci_model.pkl'), 'wb') as f:
+            pickle.dump(model, f)
+        print("UCI model trained and saved as phishing_uci_model.pkl")
+    except Exception as e:
+        print(f"Failed to train UCI model: {e}")
+
 if __name__ == "__main__":
     train_url_model()
     train_text_scikit()
-    # finetuned_deberta() # Disabled due to disk space (99% full)
+    train_uci_model()
+    finetuned_deberta() # Enabled to train DeBERTa model and increase accuracy
     print("\n✅ Multi-Agent system updated with new knowledge from local datasets.")

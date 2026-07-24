@@ -1,5 +1,13 @@
 import sys
 import os
+import io
+
+# Fix encoding issue for Windows environment
+if sys.stdout.encoding != 'utf-8':
+    sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8')
+if sys.stderr.encoding != 'utf-8':
+    sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding='utf-8')
+
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 
 from app import system

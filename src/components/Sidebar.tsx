@@ -5,11 +5,11 @@ import { usePathname } from 'next/navigation';
 import { Shield, Search, Activity, FileText, Lock, LogOut, Mail } from 'lucide-react';
 
 const navItems = [
-  { href: '/scanner',   label: 'Scanner',   icon: Search },
+  { href: '/scanner', label: 'Scanner', icon: Search },
   { href: '/dashboard', label: 'Dashboard', icon: Activity },
-  { href: '/emails',    label: 'Emails',    icon: Mail },
-  { href: '/reports',   label: 'Reports',   icon: FileText },
-  { href: '/policies',  label: 'Policies',  icon: Lock },
+  { href: '/emails', label: 'Emails', icon: Mail },
+  { href: '/reports', label: 'Reports', icon: FileText },
+  { href: '/policies', label: 'Policies', icon: Lock },
 ];
 
 export default function Sidebar() {
@@ -23,7 +23,7 @@ export default function Sidebar() {
           <Shield className="w-6 h-6 text-black" />
         </div>
         <div>
-          <h1 className="text-lg font-bold text-white tracking-wide">AegisAI</h1>
+          <h1 className="text-lg font-bold text-white tracking-wide">Obscura</h1>
           <p className="text-[11px] text-zinc-400 capitalize">Threat Portal</p>
         </div>
       </div>
@@ -36,11 +36,10 @@ export default function Sidebar() {
             <Link
               key={href}
               href={href}
-              className={`flex items-center gap-4 px-5 py-3.5 rounded-2xl font-medium transition-all group ${
-                isActive
+              className={`flex items-center gap-4 px-5 py-3.5 rounded-2xl font-medium transition-all group ${isActive
                   ? 'bg-white/10 text-white shadow-sm'
                   : 'text-zinc-500 hover:text-zinc-300 hover:bg-white/5'
-              }`}
+                }`}
             >
               <Icon className={`w-5 h-5 transition-colors ${isActive ? 'text-white' : 'group-hover:text-zinc-300'}`} />
               <span className="text-sm tracking-wide">{label}</span>
@@ -60,7 +59,7 @@ export default function Sidebar() {
             <span className="text-[10px] text-zinc-500 truncate">jacob@aegisai.com</span>
           </div>
         </div>
-        
+
         <button className="w-full flex items-center gap-3 px-5 py-3 text-zinc-500 hover:text-white transition-colors group">
           <LogOut className="w-5 h-5 group-hover:translate-x-0.5 transition-transform" />
           <span className="text-sm font-medium">Safe Exit</span>

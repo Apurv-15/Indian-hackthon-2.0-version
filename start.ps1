@@ -1,51 +1,61 @@
-$ProjectRoot = Get-Location
-$PythonExecutable = "$ProjectRoot\.venv\Scripts\python.exe"
-$BridgeScript = "$ProjectRoot\ai_agent\bridge.py"
-$Port = 5001
+# Configuration
+$PROJECT_ROOT = Get-Location
+$PYTHON_EXECUTABLE = Join-Path $PROJECT_ROOT ".venv\Scripts\python.exe"
+$BRIDGE_SCRIPT = "$PROJECT_ROOT/ai_agent/bridge.py"
+$PORT = 5001
 
-Write-Host "🛡️ Starting AegisAI Integrated System..." -ForegroundColor Cyan
+Write-Host "🛡️ Starting AegisAI Integrated System..."
 
-# 1. Start Python Bridge
-Write-Host "🚀 Launching AI Inference Engine..." -ForegroundColor Yellow
-$BridgeProcess = Start-Process -FilePath $PythonExecutable -ArgumentList "bridge.py" -WorkingDirectory "$ProjectRoot\ai_agent" -NoNewWindow -PassThru -RedirectStandardOutput "$ProjectRoot\ai_agent\bridge.log" -RedirectStandardError "$ProjectRoot\ai_agent\bridge.log"
+# Pre-startup: Clean up existing processes on ports 3001 and 5001
+Write-Host "🧹 Cleaning up previous instances..."
+Get-NetTCPConnection -LocalPort 3001, 5001 -ErrorAction SilentlyContinue | ForEach-Object { 
+    try { Stop-Process -Id $_.OwningProcess -Force -ErrorAction SilentlyContinue } catch {} 
+}
+Start-Sleep -Seconds 1
 
-# 2. Wait for Bridge
-Write-Host "⏳ Waiting for models to load (this may take a few seconds)..." -ForegroundColor Gray
-$MaxRetries = 60
-$RetryCount = 0
-$Ready = $false
+# 1. Start Python Bridge in the background
+Write-Host "🚀 Launching AI Inference Engine..."
+$bridgeJob = Start-Job -ScriptBlock {
+    param($projectRoot, $python, $script)
+    Set-Location $projectRoot
+    & "$python" "$script" > ai_agent/bridge.log 2>&1
+} -ArgumentList $PROJECT_ROOT, $PYTHON_EXECUTABLE, $BRIDGE_SCRIPT
 
-while (-not $Ready -and $RetryCount -lt $MaxRetries) {
+# Function to kill bridge on exit
+$cleanup = {
+    Write-Host ""
+    Write-Host "🛑 Shutting down..."
+    Stop-Job $bridgeJob
+    Remove-Job $bridgeJob
+}
+Register-EngineEvent PowerShell.Exiting -Action $cleanup
+
+# 2. Wait for Bridge to be ready
+Write-Host "⏳ Waiting for models to load (this may take a few seconds)..."
+$MAX_RETRIES = 180
+$RETRY_COUNT = 0
+while ($true) {
     try {
-        $Response = Invoke-WebRequest -Uri "http://127.0.0.1:$Port/health" -UseBasicParsing -ErrorAction SilentlyContinue
-        if ($Response.StatusCode -eq 200) {
-            $Ready = $true
+        $response = Invoke-WebRequest -Uri "http://127.0.0.1:$PORT/health" -Method GET -TimeoutSec 1 -UseBasicParsing
+        if ($response.StatusCode -eq 200) {
+            break
         }
     } catch {
-        # Ignore errors while waiting
+        # Ignore errors
     }
-    
-    if (-not $Ready) {
-        if ($BridgeProcess.HasExited) {
-            Write-Host "❌ AI Engine failed to start. Check ai_agent\bridge.log for errors." -ForegroundColor Red
-            exit 1
-        }
-        Start-Sleep -Seconds 1
-        $RetryCount++
+    Start-Sleep -Seconds 1
+    $RETRY_COUNT++
+    if ($RETRY_COUNT -ge $MAX_RETRIES) {
+        Write-Host "❌ AI Engine failed to start. Check ai_agent/bridge.log for errors."
+        Stop-Job $bridgeJob
+        Remove-Job $bridgeJob
+        exit 1
     }
 }
 
-if (-not $Ready) {
-    Write-Host "❌ AI Engine failed to start (Timed out). Check ai_agent\bridge.log for errors." -ForegroundColor Red
-    Stop-Process -Id $BridgeProcess.Id -Force
-    exit 1
-}
-
-Write-Host "✅ AI Inference Engine is READY!" -ForegroundColor Green
+Write-Host "✅ AI Inference Engine is READY!"
 
 # 3. Start Next.js Frontend
-Write-Host "🌐 Starting Frontend dashboard..." -ForegroundColor Blue
+Write-Host "🌐 Starting Frontend dashboard..."
+Set-Location $PROJECT_ROOT
 npm run dev
-
-# Cleanup on exit (this might not run if Ctrl+C kills the whole shell, but it's good practice)
-Stop-Process -Id $BridgeProcess.Id -Force

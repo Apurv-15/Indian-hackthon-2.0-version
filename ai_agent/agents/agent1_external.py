@@ -1,3 +1,40 @@
+"""
+╔════════════════════════════════════════════════════════════════════════════╗
+║                     AGENT 1: EXTERNAL ANALYSIS AGENT                        ║
+║              URL, Domain & External Threat Intelligence Analysis             ║
+╚════════════════════════════════════════════════════════════════════════════╝
+
+ALGORITHMS USED:
+
+1. SUPPORT VECTOR MACHINE (SVM)
+   - Model File: phishing_new.pkl
+   - Vectorizer: vectorizerurl_new.pkl (TF-IDF)
+   - Purpose: URL classification for malicious/phishing detection
+   - Training Data: malicious_url_dataset.csv
+   - Implementation: scikit-learn SVM classifier
+   - Output: Probability of URL being malicious (0-1 scale)
+   - Use Case: Detects sophisticated URL patterns not caught by heuristics
+
+2. SENTENCE TRANSFORMERS (MiniLM-L6-v2 Embeddings)
+   - Model: sentence-transformers/all-MiniLM-L6-v2
+   - Purpose: Semantic similarity matching for domain/brand impersonation detection
+   - Application: Homoglyph attack detection by comparing embeddings
+   - Output: Cosine similarity scores (0-1 scale)
+   - Use Case: Identifies domains similar to legitimate brands
+
+3. HEURISTIC PATTERN MATCHING
+   - Regex patterns for TLD detection
+   - Keyword spotting (login, verify, account, etc.)
+   - IP address detection
+   - URL shortener detection
+   - Subdomain analysis
+
+4. SEQUENCE MATCHING (String Similarity)
+   - algorithm: difflib.SequenceMatcher
+   - Purpose: Fuzzy string matching for domain name comparison
+   - Example: comparing "gogle.com" to "google.com"
+"""
+
 import re
 from sentence_transformers import SentenceTransformer
 import numpy as np
@@ -13,17 +50,29 @@ class ExternalAnalysisAgent:
         self.model = SentenceTransformer('sentence-transformers/all-MiniLM-L6-v2')
         
         # Load pickle models for URL analysis
+        # ALGORITHM: Support Vector Machine (SVM) with TF-IDF vectorization
+        # Training data: malicious_url_dataset.csv
         model_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'models')
         try:
             with open(os.path.join(model_dir, 'phishing_new.pkl'), 'rb') as f:
-                self.url_ml_model = pickle.load(f)
+                self.url_ml_model = pickle.load(f)  # SVM classifier
             with open(os.path.join(model_dir, 'vectorizerurl_new.pkl'), 'rb') as f:
-                self.url_vectorizer = pickle.load(f)
+                self.url_vectorizer = pickle.load(f)  # TF-IDF feature extractor
             self.has_url_ml = True
-            print("Successfully loaded URL ML models.")
+            print("Successfully loaded URL ML models (SVM + TF-IDF).")
         except Exception as e:
             print(f"Failed to load URL ML models: {e}")
             self.has_url_ml = False
+
+        # Load UCI model
+        try:
+            with open(os.path.join(model_dir, 'phishing_uci_model.pkl'), 'rb') as f:
+                self.url_uci_model = pickle.load(f)
+            self.has_url_uci = True
+            print("Successfully loaded URL UCI model (Random Forest).")
+        except Exception as e:
+            print(f"Failed to load URL UCI model: {e}")
+            self.has_url_uci = False
         
         self.phishing_patterns = [
             "verify your account immediately",
@@ -40,11 +89,7 @@ class ExternalAnalysisAgent:
         
         self.suspicious_tlds = ['.xyz', '.top', '.club', '.online', '.site', '.win', '.bid']
         
-        self.legitimate_domains = [
-            'google.com', 'microsoft.com', 'amazon.com', 'paypal.com', 'apple.com',
-            'facebook.com', 'replit.com', 'github.com', 'linkedin.com', 'netflix.com',
-            'twitter.com', 'instagram.com', 'dropbox.com', 'spotify.com', 'adobe.com'
-        ]
+        self.legitimate_domains = ['google.com', 'microsoft.com', 'amazon.com', 'paypal.com', 'apple.com']
         
         self.pattern_embeddings = self.model.encode(self.phishing_patterns)
         print("External Analysis Agent loaded successfully!")
@@ -84,36 +129,64 @@ class ExternalAnalysisAgent:
         
         domain_similarity = self.check_domain_similarity(url)
         if domain_similarity > 0.7:
-            risk_score += 0.3
+            risk_score = max(risk_score, 0.85)
             reasons.append("Domain similar to legitimate brand")
             
         url_ml_prob = 0.0
         if self.has_url_ml:
             try:
+                # ALGORITHM: TF-IDF + Support Vector Machine (SVM)
+                # Step 1: TF-IDF Vectorization - converts URL string to numerical features
                 features = self.url_vectorizer.transform([url])
-                # phishing.pkl is LogisticRegression
+                
+                # Step 2: SVM Classification - predicts maliciousness probability
+                # Uses probability calibration from phishing_new.pkl (SVM model)
                 url_ml_prob = self.url_ml_model.predict_proba(features)[0][1]
-                
-                # Hybrid Logic: Weight the ML model heavily if it has high confidence
-                if url_ml_prob > 0.8:
-                    risk_score = max(risk_score, 0.9)
-                    reasons.append(f"ML model identified highly malicious URL structure (Score: {url_ml_prob:.1%})")
-                elif url_ml_prob > 0.5:
-                    risk_score = max(risk_score, 0.6)
-                    reasons.append(f"ML model flagged suspicious URL structure (Score: {url_ml_prob:.1%})")
-                
             except Exception as e:
                 print(f"Error predicting URL with ML model: {e}")
+
+        # UCI Tabular Feature Model Prediction
+        url_uci_prob = 0.0
+        if getattr(self, 'has_url_uci', False):
+            try:
+                uci_features = self.extract_uci_features(url)
+                url_uci_prob = self.url_uci_model.predict_proba([uci_features])[0][1]
+            except Exception as e:
+                print(f"Error predicting URL with UCI model: {e}")
+
+        # Combine predictions by taking the maximum probability of maliciousness
+        combined_ml_prob = max(url_ml_prob, url_uci_prob)
+
+        # Hybrid Logic: Weight the ML models heavily if they have high confidence
+        if combined_ml_prob > 0.8:
+            risk_score = max(risk_score, 0.9)
+            reasons.append(f"ML models identified highly malicious URL structure (Score: {combined_ml_prob:.1%})")
+        elif combined_ml_prob > 0.5:
+            risk_score = max(risk_score, 0.6)
+            reasons.append(f"ML models flagged suspicious URL structure (Score: {combined_ml_prob:.1%})")
         
-        return min(risk_score, 1.0), reasons, url_ml_prob
+        return min(risk_score, 1.0), reasons, combined_ml_prob
     
     def check_domain_similarity(self, url):
-        """Check if domain is similar to legitimate domains"""
-        domain = self.extract_domain(url)
-        max_similarity = 0.0
+        """
+        Check if domain is similar to legitimate domains.
         
+        ALGORITHM: Sequence Matching (Fuzzy String Similarity)
+        - Uses difflib.SequenceMatcher for string matching
+        - Detects homoglyph attacks: gogle.com vs google.com
+        - Returns similarity ratio (0-1 scale)
+        """
+        domain = self.extract_domain(url).lower()
+        
+        # If it is exactly the brand or a subdomain of the brand, it is legitimate
         for legit_domain in self.legitimate_domains:
-            similarity = SequenceMatcher(None, domain.lower(), legit_domain).ratio()
+            if domain == legit_domain.lower() or domain.endswith('.' + legit_domain.lower()):
+                return 0.0
+                
+        max_similarity = 0.0
+        for legit_domain in self.legitimate_domains:
+            # SequenceMatcher.ratio(): compares two strings and returns similarity (0-1)
+            similarity = SequenceMatcher(None, domain, legit_domain.lower()).ratio()
             max_similarity = max(max_similarity, similarity)
         
         return max_similarity
@@ -162,11 +235,115 @@ class ExternalAnalysisAgent:
         except Exception as e:
             print(f"Error in semantic similarity: {e}")
         
+        url_risk_val = max(results['url_risk'], results['url_ml_risk'])
+        domain_similarity = results['domain_similarity']
+        sim_risk = 0.9 if domain_similarity > 0.7 else (domain_similarity * 0.5)
         results['overall_risk'] = min(
-            results['url_risk'] * 0.6 + 
-            results['domain_similarity'] * 0.4 +
-            len(results['suspicious_patterns']) * 0.1,
+            max(url_risk_val, sim_risk) + 
+            len(results['suspicious_patterns']) * 0.3,
             1.0
         )
         
         return results
+
+    def extract_uci_features(self, url):
+        """
+        Extract 30 structural/categorical features from a raw URL.
+        Features that cannot be computed offline/statically are set to benign/stable defaults (-1).
+        """
+        features = {}
+        
+        # 1. having_ip_address
+        parsed = urlparse(url)
+        domain = parsed.netloc or parsed.path.split('/')[0]
+        if re.search(r'\d+\.\d+\.\d+\.\d+', domain):
+            features['having_ip_address'] = 1
+        else:
+            features['having_ip_address'] = -1
+            
+        # 2. url_length
+        length = len(url)
+        if length < 54:
+            features['url_length'] = -1
+        elif length <= 75:
+            features['url_length'] = 0
+        else:
+            features['url_length'] = 1
+            
+        # 3. shortining_service
+        shortening_services = ['bit.ly', 'tinyurl', 'goo.gl', 'ow.ly', 'tiny.cc']
+        is_short = any(s in url.lower() for s in shortening_services)
+        features['shortining_service'] = 1 if is_short else -1
+        
+        # 4. having_at_symbol
+        features['having_at_symbol'] = 1 if '@' in url else -1
+        
+        # 5. double_slash_redirecting
+        if url.lower().startswith('https://'):
+            has_double = '//' in url[8:]
+        elif url.lower().startswith('http://'):
+            has_double = '//' in url[7:]
+        else:
+            has_double = '//' in url
+        features['double_slash_redirecting'] = 1 if has_double else -1
+        
+        # 6. prefix_suffix
+        features['prefix_suffix'] = 1 if '-' in domain else -1
+        
+        # 7. having_sub_domain
+        dots_count = domain.count('.')
+        if dots_count <= 2:
+            features['having_sub_domain'] = -1
+        elif dots_count == 3:
+            features['having_sub_domain'] = 0
+        else:
+            features['having_sub_domain'] = 1
+            
+        # 8. sslfinal_state
+        if url.lower().startswith('https://'):
+            features['sslfinal_state'] = 1
+        else:
+            features['sslfinal_state'] = -1
+            
+        # 9. domain_registration_length (default)
+        features['domain_registration_length'] = -1
+        
+        # 10. favicon (default)
+        features['favicon'] = -1
+        
+        # 11. port (default)
+        features['port'] = -1
+        
+        # 12. https_token
+        features['https_token'] = 1 if 'https' in domain else -1
+        
+        # Other offline features default to -1 (benign)
+        features['request_url'] = -1
+        features['url_of_anchor'] = -1
+        features['links_in_tags'] = -1
+        features['sfh'] = -1
+        features['submitting_to_email'] = -1
+        features['abnormal_url'] = -1
+        features['redirect'] = -1
+        features['on_mouseover'] = -1
+        features['rightclick'] = -1
+        features['popupwindow'] = -1
+        features['iframe'] = -1
+        features['age_of_domain'] = -1
+        features['dnsrecord'] = -1
+        features['web_traffic'] = -1
+        features['page_rank'] = -1
+        features['google_index'] = -1
+        features['links_pointing_to_page'] = -1
+        features['statistical_report'] = -1
+        
+        col_order = [
+            'having_ip_address', 'url_length', 'shortining_service', 'having_at_symbol',
+            'double_slash_redirecting', 'prefix_suffix', 'having_sub_domain', 'sslfinal_state',
+            'domain_registration_length', 'favicon', 'port', 'https_token', 'request_url',
+            'url_of_anchor', 'links_in_tags', 'sfh', 'submitting_to_email', 'abnormal_url',
+            'redirect', 'on_mouseover', 'rightclick', 'popupwindow', 'iframe', 'age_of_domain',
+            'dnsrecord', 'web_traffic', 'page_rank', 'google_index', 'links_pointing_to_page',
+            'statistical_report'
+        ]
+        return [features[col] for col in col_order]

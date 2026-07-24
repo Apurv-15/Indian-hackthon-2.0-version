@@ -1,5 +1,4 @@
 flask
-flask-cors
 sentence-transformers
 scikit-learn
 transformers
@@ -7,4 +6,4 @@ torch
 gradio
 numpy
 scipy
-python-dotenv
+ucimlrepo
