@@ -232,6 +232,32 @@ class ContentAnalysisAgent:
         text = input_data['cleaned_text']
         urls = input_data['urls']
 
+        # Check if the input is a raw URL
+        is_raw_url = False
+        text_stripped = text.strip()
+        if (text_stripped.startswith('http://') or text_stripped.startswith('https://')) and len(text_stripped.split()) == 1:
+            is_raw_url = True
+
+        if is_raw_url:
+            return {
+                'phishing_probability': 0.0,
+                'prompt_injection': False,
+                'prompt_injection_patterns': [],
+                'ai_generated_probability': 0.0,
+                'spam_probability': 0.0,
+                'spam_ml_score': 0.0,
+                'keyword_matches': [],
+                'urgency_matches': [],
+                'ai_patterns': [],
+                'transformer_score': 0.0,
+                'using_transformer': False,
+                'sentiment_score': 0.0,
+                'sentiment_label': "UNKNOWN",
+                'connection_score': 1.0,
+                'connection_message': "Safe: Input is a raw URL",
+                'is_raw_url': True
+            }
+
         # Benign baseline check for short / common messages
         benign_greetings = ['hi', 'hii', 'hiii', 'hello', 'hey', 'how are you', 'how is this', 'test']
         clean_msg = text.lower().strip().replace('?', '').replace('!', '')

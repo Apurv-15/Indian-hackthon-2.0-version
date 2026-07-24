@@ -84,7 +84,7 @@ def api_analyze(text):
         result = system.analyze(text)
         
         # Map to the schema expected by the Next.js frontend
-        risk_map = {"MINIMAL": "Safe", "LOW": "Low", "MEDIUM": "Medium", "HIGH": "High"}
+        risk_map = {"MINIMAL": "Safe", "LOW": "Low", "MEDIUM": "Medium", "HIGH": "High", "CRITICAL": "Critical"}
         risk_level = risk_map.get(result["risk_level"], "Medium")
 
         return {

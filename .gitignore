@@ -15,3 +15,12 @@ __pycache__/
 inference_cache.json
 .vscode/
 scratch/
+bridge.txt
+test_agent4.py
+temp_results/
+.gradio/
+.ipynb_checkpoints/
+ai_agent/models/fine_tuned_deberta/model.safetensors
+ai_agent/models/fine_tuned_deberta/training_args.bin
+/*.csv
+
