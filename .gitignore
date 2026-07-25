@@ -9,3 +9,11 @@ coverage/
 !.env.example
 generateToken.cjs
 exchangeToken.cjs
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+venv/
+*.pkl
+
