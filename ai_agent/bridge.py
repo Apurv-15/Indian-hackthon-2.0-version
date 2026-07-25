@@ -7,7 +7,8 @@ import os, sys, warnings
 os.environ["TOKENIZERS_PARALLELISM"] = "false"
 warnings.filterwarnings("ignore")
 
-import io
+import io, time, threading
+from collections import defaultdict, deque
 sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8')
 
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
@@ -19,6 +20,25 @@ from app import system
 app = Flask(__name__)
 CORS(app) # Allow cross-origin requests from the browser extension
 
+# ponytail: in-memory fixed-window limiter, per-process only. Swap for
+# flask-limiter/redis if the bridge is ever run with multiple workers.
+RATE_LIMIT = 10          # requests
+RATE_WINDOW_SECONDS = 10
+_hits = defaultdict(deque)
+_hits_lock = threading.Lock()
+
+
+def rate_limited(ip):
+    now = time.monotonic()
+    with _hits_lock:
+        window = _hits[ip]
+        while window and now - window[0] > RATE_WINDOW_SECONDS:
+            window.popleft()
+        if len(window) >= RATE_LIMIT:
+            return True
+        window.append(now)
+        return False
+
 
 @app.route("/health", methods=["GET"])
 def health():
@@ -27,6 +47,9 @@ def health():
 
 @app.route("/analyze", methods=["POST"])
 def analyze():
+    if rate_limited(request.remote_addr):
+        return jsonify({"error": "Too many requests, slow down."}), 429
+
     data = request.get_json(silent=True) or {}
     user_input = data.get("input", "").strip()
 

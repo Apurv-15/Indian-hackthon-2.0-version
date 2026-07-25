@@ -4,22 +4,44 @@
         self.device = torch.device("mps") if torch.backends.mps.is_available() else torch.device("cpu")
         print(f"Using device: {self.device} for inference optimization.")
 
-        self.model_name = "microsoft/deberta-v3-small"
-        self.tokenizer = AutoTokenizer.from_pretrained(self.model_name, use_fast=False)
-        self.model = AutoModelForSequenceClassification.from_pretrained(
-            self.model_name, 
-            num_labels=2,  
-            ignore_mismatched_sizes=True
-        ).to(self.device)
-        
+        # Load local text ML models...
+        model_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'models')
+        local_deberta_path = os.path.join(model_dir, 'fine_tuned_deberta')
+        has_weights = (
+            os.path.exists(os.path.join(local_deberta_path, "pytorch_model.bin")) or
+            os.path.exists(os.path.join(local_deberta_path, "model.safetensors"))
+        )
+
+        if os.path.exists(local_deberta_path) and has_weights:
+            self.model_name = local_deberta_path
+            self.has_deberta = True
+            print(f"Loading local fine-tuned DeBERTa model from {local_deberta_path}...")
+            self.tokenizer = AutoTokenizer.from_pretrained(self.model_name, use_fast=True)
+            self.model = AutoModelForSequenceClassification.from_pretrained(
+                self.model_name,
+                num_labels=2,
+                ignore_mismatched_sizes=True
+            ).to(self.device)
+        else:
+            self.model_name = "microsoft/deberta-v3-small"
+            self.has_deberta = False
+            self.tokenizer = AutoTokenizer.from_pretrained(self.model_name, use_fast=False)
+            self.model = AutoModelForSequenceClassification.from_pretrained(
+                self.model_name,
+                num_labels=2,
+                ignore_mismatched_sizes=True
+            ).to(self.device)
+            print("Notice: Local fine-tuned DeBERTa model not found. Using pre-trained microsoft/deberta-v3-small.")
+
         # New: sentence-transformers/all-MiniLM-L6-v2 using AutoModel/AutoTokenizer
         self.minilm_name = "sentence-transformers/all-MiniLM-L6-v2"
         self.minilm_tokenizer = AutoTokenizer.from_pretrained(self.minilm_name)
         self.minilm_model = AutoModel.from_pretrained(self.minilm_name).to(self.device)
-        
+
         # Optimization: Use Half-precision if on MPS
         if self.device.type == "mps":
-            self.model = self.model.half()
+            if self.model:
+                self.model = self.model.half()
             self.minilm_model = self.minilm_model.half()
 
         self.model.eval()

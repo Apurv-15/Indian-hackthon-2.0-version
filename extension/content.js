@@ -30,19 +30,26 @@ tooltip.style.cssText = `
 `;
 document.body.appendChild(tooltip);
 
+// Escape untrusted text before it ever touches innerHTML
+function escapeHtml(str) {
+  const div = document.createElement("div");
+  div.textContent = String(str ?? "");
+  return div.innerHTML;
+}
+
 // Function to update tooltip content
 function updateTooltip(x, y, data) {
   if (data.error) {
-    tooltip.innerHTML = `<span style="color: #ff4d4d">Error: ${data.error}</span>`;
+    tooltip.innerHTML = `<span style="color: #ff4d4d">Error: ${escapeHtml(data.error)}</span>`;
   } else {
     tooltip.innerHTML = `
       <div style="font-weight: bold; margin-bottom: 4px; display: flex; justify-content: space-between; align-items: center;">
         <span>AegisAI Analysis</span>
-        <span style="color: ${RISK_COLORS[data.riskLevel] || '#fff'}; font-size: 11px; padding: 2px 6px; border-radius: 4px; background: rgba(0,0,0,0.3);">${data.riskLevel} Risk</span>
+        <span style="color: ${RISK_COLORS[data.riskLevel] || '#fff'}; font-size: 11px; padding: 2px 6px; border-radius: 4px; background: rgba(0,0,0,0.3);">${escapeHtml(data.riskLevel)} Risk</span>
       </div>
-      <div><strong>Verdict:</strong> ${data.threatType || 'Unknown'}</div>
-      <div><strong>Confidence:</strong> ${data.confidenceScore}%</div>
-      <div style="margin-top: 6px; font-size: 11px; color: #ccc;">${data.explanation}</div>
+      <div><strong>Verdict:</strong> ${escapeHtml(data.threatType || 'Unknown')}</div>
+      <div><strong>Confidence:</strong> ${escapeHtml(data.confidenceScore)}%</div>
+      <div style="margin-top: 6px; font-size: 11px; color: #ccc;">${escapeHtml(data.explanation)}</div>
     `;
     tooltip.style.borderTop = `3px solid ${RISK_COLORS[data.riskLevel] || 'transparent'}`;
   }

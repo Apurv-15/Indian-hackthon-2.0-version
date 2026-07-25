@@ -1,0 +1,11 @@
+gradio
+flask
+flask-cors
+pandas
+numpy
+scikit-learn
+torch --index-url https://download.pytorch.org/whl/cpu
+transformers
+sentence-transformers
+sentencepiece
+protobuf
