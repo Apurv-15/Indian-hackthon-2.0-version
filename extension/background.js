@@ -1,5 +1,7 @@
 const API_URL = "http://localhost:5001/analyze";
+const STORE_TRUST_API_URL = "http://localhost:5001/store-trust";
 const cache = new Map();
+const storeTrustCache = new Map();
 
 chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
   if (request.action === "analyze") {
@@ -27,6 +29,32 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
       sendResponse({ error: "API unreachable. Make sure the backend bridge is running." });
     });
     return true; // Keep message channel open for async response
+  }
+
+  if (request.action === "storeTrust") {
+    const url = request.url;
+    if (storeTrustCache.has(url)) {
+        sendResponse(storeTrustCache.get(url));
+        return true;
+    }
+
+    fetch(STORE_TRUST_API_URL, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({ url: url })
+    })
+    .then(response => response.json())
+    .then(data => {
+      storeTrustCache.set(url, data);
+      sendResponse(data);
+    })
+    .catch(error => {
+      console.error("API error:", error);
+      sendResponse({ error: "API unreachable. Make sure the backend bridge is running." });
+    });
+    return true;
   }
 });
 

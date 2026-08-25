@@ -23,11 +23,18 @@ class ContentAnalysisAgent:
         model_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'models')
         local_deberta_path = os.path.join(model_dir, 'fine_tuned_deberta')
 
+        has_weights = False
         if os.path.exists(local_deberta_path):
+            for f in os.listdir(local_deberta_path):
+                if f in ['pytorch_model.bin', 'model.safetensors', 'tf_model.h5', 'model.ckpt.index', 'flax_model.msgpack']:
+                    has_weights = True
+                    break
+
+        if os.path.exists(local_deberta_path) and has_weights:
             self.model_name = local_deberta_path
             self.has_deberta = True
             print(f"Loading local fine-tuned DeBERTa model from {local_deberta_path}...")
-            self.tokenizer = AutoTokenizer.from_pretrained(self.model_name, use_fast=False)
+            self.tokenizer = AutoTokenizer.from_pretrained(self.model_name, use_fast=True)
             self.model = AutoModelForSequenceClassification.from_pretrained(
                 self.model_name,
                 num_labels=2,

@@ -17,9 +17,12 @@ sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 from flask import Flask, request, jsonify
 from flask_cors import CORS
 from app import system
+from agents.agent5_store_trust import StoreTrustAgent
 
 app = Flask(__name__)
 CORS(app) # Allow cross-origin requests from the browser extension
+
+store_trust_agent = StoreTrustAgent()
 
 
 @app.route("/health", methods=["GET"])
@@ -67,6 +70,23 @@ def analyze():
                 "attackCategories": result["detailed_results"]["agent4"].get("attack_categories", []),
             },
         })
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/store-trust", methods=["POST"])
+def store_trust():
+    data = request.get_json(silent=True) or {}
+    url = data.get("url", "").strip()
+
+    if not url:
+        return jsonify({"error": "No url provided"}), 400
+    if not (url.startswith("http://") or url.startswith("https://")):
+        url = "https://" + url
+
+    try:
+        result = store_trust_agent.analyze(url)
+        return jsonify(result)
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
