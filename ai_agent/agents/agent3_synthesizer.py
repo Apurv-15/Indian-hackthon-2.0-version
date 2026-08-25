@@ -130,13 +130,13 @@ class SynthesizerAgent:
         """Generate detailed, context-aware forensic reasoning like a security expert."""
         reasons = []
         
-        # ââ URL / Domain Forensics ââ
+        # —— URL / Domain Forensics ——
         for factor in agent1_results.get('risk_factors', []):
             factor_lower = factor.lower()
             if 'suspicious tld' in factor_lower:
-                reasons.append(f"URL Analysis: {factor} â uncommon TLDs are frequently used by phishing campaigns to evade domain blocklists")
+                reasons.append(f"URL Analysis: {factor} — uncommon TLDs are frequently used by phishing campaigns to evade domain blocklists")
             elif 'ip address' in factor_lower:
-                reasons.append(f"URL Analysis: {factor} â legitimate services almost never use raw IP addresses in their links")
+                reasons.append(f"URL Analysis: {factor} — legitimate services almost never use raw IP addresses in their links")
             elif 'shortening' in factor_lower:
                 reasons.append(f"URL Analysis: {factor} — URL shorteners hide the true destination, commonly abused by attackers")
             elif 'ml model' in factor_lower:
@@ -163,51 +163,51 @@ class SynthesizerAgent:
         urgency_matches = agent2_results.get('urgency_matches', [])
         if urgency_matches:
             urg_str = ', '.join(f"'{u}'" for u in urgency_matches[:3])
-            reasons.append(f"Behavioral Threat: Urgency/pressure language detected [{urg_str}] â creates artificial time pressure to bypass critical thinking")
+            reasons.append(f"Behavioral Threat: Urgency/pressure language detected [{urg_str}] — creates artificial time pressure to bypass critical thinking")
         
-        # ââ Prompt Injection (Agent 4 Integration) ââ
+        # —— Prompt Injection (Agent 4 Integration) ——
         if agent4_results.get('prompt_injection_detected'):
             cats = agent4_results.get('attack_categories', [])
             detail = f"Detected Categories: {', '.join(cats)}" if cats else "AI instruction override attempt"
-            reasons.append(f"Prompt Injection Agent: {detail} (Risk: {agent4_results['confidence']:.0%}) â advanced hijacking pattern identified via transformer analysis")
+            reasons.append(f"Prompt Injection Agent: {detail} (Risk: {agent4_results['confidence']:.0%}) — advanced hijacking pattern identified via transformer analysis")
         elif agent2_results.get('prompt_injection'):
-            reasons.append("Prompt Injection: Heuristic pattern match â suspicious instruction override pattern detected in input text")
+            reasons.append("Prompt Injection: Heuristic pattern match — suspicious instruction override pattern detected in input text")
         
-        # ââ AI Generated Content ââ
+        # —— AI Generated Content ——
         ai_prob = agent2_results.get('ai_generated_probability', 0)
         if ai_prob > 0.5:
-            reasons.append(f"Content Analysis: Text shows AI-generation patterns (Score: {ai_prob:.0%}) â machine-written scam content designed to appear legitimate")
+            reasons.append(f"Content Analysis: Text shows AI-generation patterns (Score: {ai_prob:.0%}) — machine-written scam content designed to appear legitimate")
         
-        # ââ Semantic Divergence ââ
+        # —— Semantic Divergence ——
         connection_score = agent2_results.get('connection_score', 1.0)
         connection_msg = agent2_results.get('connection_message', '')
         if connection_score < 0.4:
-            reasons.append(f"Hidden Threat: {connection_msg} (Divergence Score: {connection_score:.0%}) â link text says one thing but URL points somewhere completely different")
+            reasons.append(f"Hidden Threat: {connection_msg} (Divergence Score: {connection_score:.0%}) — link text says one thing but URL points somewhere completely different")
         elif connection_score < 0.6 and agent1_results.get('url_risk', 0) > 0.3:
-            reasons.append(f"Content Analysis: Weak semantic link between email text and embedded URLs ({connection_score:.0%}) â potentially deceptive link labels")
+            reasons.append(f"Content Analysis: Weak semantic link between email text and embedded URLs ({connection_score:.0%}) — potentially deceptive link labels")
         
-        # ââ Sentiment / Tone ââ
+        # —— Sentiment / Tone ——
         sentiment_label = agent2_results.get('sentiment_label', 'UNKNOWN')
         sentiment_score = agent2_results.get('sentiment_score', 0)
         if sentiment_label == 'NEGATIVE' and sentiment_score > 0.8:
-            reasons.append(f"Behavioral Threat: Highly aggressive/threatening tone detected (Score: {sentiment_score:.1%}) â intimidation tactics used to provoke panic-driven actions")
+            reasons.append(f"Behavioral Threat: Highly aggressive/threatening tone detected (Score: {sentiment_score:.1%}) — intimidation tactics used to provoke panic-driven actions")
         elif sentiment_label == 'NEGATIVE' and sentiment_score > 0.5:
-            reasons.append(f"Content Analysis: Negative sentiment detected (Score: {sentiment_score:.1%}) â may use fear-based language to manipulate recipient")
+            reasons.append(f"Content Analysis: Negative sentiment detected (Score: {sentiment_score:.1%}) — may use fear-based language to manipulate recipient")
         
-        # ââ Spam Signals ââ
+        # —— Spam Signals ——
         spam_prob = max(agent2_results.get('spam_probability', 0), agent2_results.get('spam_ml_score', 0))
         if spam_prob > 0.7:
-            reasons.append(f"Content Analysis: High spam probability ({spam_prob:.0%}) â message matches known bulk/unsolicited mail patterns")
+            reasons.append(f"Content Analysis: High spam probability ({spam_prob:.0%}) — message matches known bulk/unsolicited mail patterns")
         
-        # ââ Safe fallback: never return empty reasoning ââ
+        # —— Safe fallback: never return empty reasoning ——
         if not reasons:
             if risk_score < 0.2:
-                reasons.append("Content Analysis: No suspicious patterns, malicious URLs, or social engineering tactics detected â message appears legitimate")
+                reasons.append("Content Analysis: No suspicious patterns, malicious URLs, or social engineering tactics detected — message appears legitimate")
                 reasons.append("URL Analysis: No links found, or all URLs point to verified, trusted domains")
             else:
                 reasons.append(f"Content Analysis: Minor risk signals detected (combined score: {risk_score:.0%}) but no single strong threat indicator found")
         
-        # ââ Recommended Actions ââ
+        # —— Recommended Actions ——
         actions = []
         if "Phishing" in threat_types or "Malicious URL" in threat_types:
             actions.extend([
@@ -223,7 +223,7 @@ class SynthesizerAgent:
         elif "Spam" in threat_types:
             actions.extend([
                 "Mark as spam and block sender",
-                "Do not unsubscribe via links â this confirms your address"
+                "Do not unsubscribe via links — this confirms your address"
             ])
         elif "AI-Generated Scam" in threat_types:
             actions.extend([

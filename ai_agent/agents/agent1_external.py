@@ -43,6 +43,7 @@ from urllib.parse import urlparse
 from difflib import SequenceMatcher
 import os
 import pickle
+import requests
 
 class ExternalAnalysisAgent:
     def __init__(self):
@@ -94,11 +95,48 @@ class ExternalAnalysisAgent:
         self.pattern_embeddings = self.model.encode(self.phishing_patterns)
         print("External Analysis Agent loaded successfully!")
     
+    def check_url_live(self, url):
+        """
+        Real-time reachability check via a live HTTP request.
+        One request covers DNS resolution, TCP connect, SSL validation, and the
+        actual redirect chain — all things the static heuristics below can't see.
+        ponytail: sequential blocking request per URL with a short timeout,
+        parallelize with a thread pool if a message ever has many URLs to check.
+        """
+        result = {'reachable': False, 'ssl_valid': True, 'final_url': url, 'redirected': False}
+        try:
+            resp = requests.get(url, timeout=4, allow_redirects=True, headers={'User-Agent': 'Mozilla/5.0'})
+            result['reachable'] = True
+            result['final_url'] = resp.url
+            result['redirected'] = urlparse(resp.url).netloc.lower() != urlparse(url).netloc.lower()
+        except requests.exceptions.SSLError:
+            result['ssl_valid'] = False
+            result['reachable'] = True
+        except requests.exceptions.RequestException:
+            pass
+        return result
+
     def analyze_url_risk(self, url):
         """Analyze URL for suspicious patterns"""
         risk_score = 0.0
         reasons = []
-        
+
+        live = self.check_url_live(url)
+        if not live['reachable']:
+            risk_score += 0.15
+            reasons.append("Live check: URL is unreachable right now (DNS/connection failure) — often a dead or sinkholed phishing host")
+        else:
+            if not live['ssl_valid']:
+                risk_score = max(risk_score, 0.6)
+                reasons.append("Live check: SSL certificate is invalid on the live connection — insecure or spoofed endpoint")
+            if live['redirected']:
+                final_domain = urlparse(live['final_url']).netloc
+                reasons.append(f"Live check: URL redirects in real time to a different domain: {final_domain}")
+                redirect_similarity = self.check_domain_similarity(live['final_url'])
+                if redirect_similarity > 0.7:
+                    risk_score = max(risk_score, 0.9)
+                    reasons.append("Live check: redirect destination impersonates a known brand")
+
         for tld in self.suspicious_tlds:
             if url.lower().endswith(tld) or tld in url.lower():
                 risk_score += 0.3
@@ -149,7 +187,7 @@ class ExternalAnalysisAgent:
         url_uci_prob = 0.0
         if getattr(self, 'has_url_uci', False):
             try:
-                uci_features = self.extract_uci_features(url)
+                uci_features = self.extract_uci_features(url, live)
                 url_uci_prob = self.url_uci_model.predict_proba([uci_features])[0][1]
             except Exception as e:
                 print(f"Error predicting URL with UCI model: {e}")
@@ -246,11 +284,15 @@ class ExternalAnalysisAgent:
         
         return results
 
-    def extract_uci_features(self, url):
+    def extract_uci_features(self, url, live=None):
         """
         Extract 30 structural/categorical features from a raw URL.
-        Features that cannot be computed offline/statically are set to benign/stable defaults (-1).
+        Features that need a live lookup (WHOIS domain age, traffic rank, page
+        rank, backlink count) still default to benign (-1) — those need paid
+        APIs, out of scope here. dnsrecord/redirect now come from the real-time
+        check_url_live() result instead of being hardcoded.
         """
+        live = live or {}
         features = {}
         
         # 1. having_ip_address
@@ -324,13 +366,13 @@ class ExternalAnalysisAgent:
         features['sfh'] = -1
         features['submitting_to_email'] = -1
         features['abnormal_url'] = -1
-        features['redirect'] = -1
+        features['redirect'] = 1 if live.get('redirected') else -1
         features['on_mouseover'] = -1
         features['rightclick'] = -1
         features['popupwindow'] = -1
         features['iframe'] = -1
         features['age_of_domain'] = -1
-        features['dnsrecord'] = -1
+        features['dnsrecord'] = 1 if not live.get('reachable', True) else -1
         features['web_traffic'] = -1
         features['page_rank'] = -1
         features['google_index'] = -1
@@ -347,3 +389,33 @@ class ExternalAnalysisAgent:
             'statistical_report'
         ]
         return [features[col] for col in col_order]
+
+
+def _demo():
+    """Self-check: live-check results must map to the correct UCI feature codes, without hitting the network."""
+    agent = object.__new__(ExternalAnalysisAgent)  # skip __init__ (no model loading needed for this check)
+    dns_idx = ['having_ip_address', 'url_length', 'shortining_service', 'having_at_symbol',
+               'double_slash_redirecting', 'prefix_suffix', 'having_sub_domain', 'sslfinal_state',
+               'domain_registration_length', 'favicon', 'port', 'https_token', 'request_url',
+               'url_of_anchor', 'links_in_tags', 'sfh', 'submitting_to_email', 'abnormal_url',
+               'redirect', 'on_mouseover', 'rightclick', 'popupwindow', 'iframe', 'age_of_domain',
+               'dnsrecord', 'web_traffic', 'page_rank', 'google_index', 'links_pointing_to_page',
+               'statistical_report'].index
+
+    unreachable = ExternalAnalysisAgent.extract_uci_features(agent, "http://example.com", {'reachable': False})
+    assert unreachable[dns_idx('dnsrecord')] == 1, "unreachable domain should mark dnsrecord as suspicious"
+
+    reachable = ExternalAnalysisAgent.extract_uci_features(agent, "http://example.com", {'reachable': True})
+    assert reachable[dns_idx('dnsrecord')] == -1, "reachable domain should mark dnsrecord as benign"
+
+    redirected = ExternalAnalysisAgent.extract_uci_features(agent, "http://example.com", {'redirected': True})
+    assert redirected[dns_idx('redirect')] == 1
+
+    not_redirected = ExternalAnalysisAgent.extract_uci_features(agent, "http://example.com", {})
+    assert not_redirected[dns_idx('redirect')] == -1
+
+    print("agent1_external self-check passed")
+
+
+if __name__ == "__main__":
+    _demo()

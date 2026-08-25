@@ -133,6 +133,36 @@
     button:hover {
       opacity: 0.9;
     }
+
+    button:disabled {
+      opacity: 0.5;
+      cursor: default;
+    }
+
+    button.secondary {
+      background: transparent;
+      border: 1px solid rgba(255, 255, 255, 0.15);
+    }
+
+    #trust-result {
+      margin-top: 12px;
+      font-size: 12px;
+    }
+
+    #trust-result .trust-score-line {
+      font-weight: 600;
+      margin-bottom: 8px;
+    }
+
+    #trust-result ul {
+      margin: 4px 0 8px 0;
+      padding-left: 18px;
+      color: var(--subtext);
+    }
+
+    #trust-result li {
+      margin-bottom: 4px;
+    }
   </style>
 </head>
 <body>
@@ -168,6 +198,11 @@
     <div style="margin-top: 20px; display: flex; gap: 8px;">
         <button id="scan-page" style="flex: 1;">Scan Entire Page</button>
     </div>
+    <div style="margin-top: 8px; display: flex; gap: 8px;">
+        <button id="check-store" class="secondary" style="flex: 1;">Check This Store</button>
+    </div>
+
+    <div id="trust-result" class="status-card" style="display: none;"></div>
   </div>
   <footer>
     <span>localhost:5001 connected</span>
