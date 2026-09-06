@@ -33,10 +33,6 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
 
   if (request.action === "storeTrust") {
     const url = request.url;
-    if (storeTrustCache.has(url)) {
-        sendResponse(storeTrustCache.get(url));
-        return true;
-    }
 
     fetch(STORE_TRUST_API_URL, {
       method: "POST",
@@ -47,7 +43,6 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
     })
     .then(response => response.json())
     .then(data => {
-      storeTrustCache.set(url, data);
       sendResponse(data);
     })
     .catch(error => {
