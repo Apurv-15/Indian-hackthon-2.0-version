@@ -246,14 +246,29 @@ class ContentAnalysisAgent:
             is_raw_url = True
 
         if is_raw_url:
+            # Even for raw URLs, run the ML model on the URL string itself
+            # The TF-IDF vectorizer can extract useful features from URL text
+            spam_ml_prob = 0.0
+            if self.has_text_ml:
+                try:
+                    features = self.scikit_vectorizer.transform([text_stripped])
+                    spam_ml_prob = self.scikit_model.predict_proba(features)[0][1]
+                except Exception:
+                    pass
+            
+            # Also check for phishing keywords in the URL path
+            url_lower = text_stripped.lower()
+            url_keyword_matches = [kw for kw in self.phishing_keywords if kw in url_lower]
+            url_phishing_score = min(len(url_keyword_matches) * 0.15, 0.6)
+            
             return {
-                'phishing_probability': 0.0,
+                'phishing_probability': max(url_phishing_score, spam_ml_prob * 0.5),
                 'prompt_injection': False,
                 'prompt_injection_patterns': [],
                 'ai_generated_probability': 0.0,
-                'spam_probability': 0.0,
-                'spam_ml_score': 0.0,
-                'keyword_matches': [],
+                'spam_probability': spam_ml_prob,
+                'spam_ml_score': spam_ml_prob,
+                'keyword_matches': url_keyword_matches,
                 'urgency_matches': [],
                 'ai_patterns': [],
                 'transformer_score': 0.0,
@@ -261,7 +276,7 @@ class ContentAnalysisAgent:
                 'sentiment_score': 0.0,
                 'sentiment_label': "UNKNOWN",
                 'connection_score': 1.0,
-                'connection_message': "Safe: Input is a raw URL",
+                'connection_message': "Raw URL — content analysis limited to URL structure",
                 'is_raw_url': True
             }
 
