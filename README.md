@@ -19,51 +19,52 @@ The AegisAI browser extension provides **on-the-fly, zero-latency phishing prote
 
 ## 🧠 Multi-Agent Risk Scoring Engine
 
-The backend relies on a **4-Agent Ensemble System** combining legacy machine learning models (fast & interpretable) and modern Deep Learning Transformers (highly semantic).
+The backend relies on a **5-Agent Ensemble System** combining legacy machine learning models (fast & interpretable) and modern Deep Learning Transformers (highly semantic).
 
 ```
-User Input / Link 
-      │
-      ▼
-┌─────────────────────────────────────────────────────────┐
-│              Preprocessed & Tokenized                   │
-└─────────────────────────┬───────────────────────────────┘
-                          │ (Parallel Execution)
-     ┌────────────────────┼────────────────────┐
-     ▼                    ▼                    ▼
-┌──────────────┐     ┌──────────────┐     ┌──────────────┐
-│   Agent 1    │     │   Agent 2    │     │   Agent 4    │
-│ External/URL │     │   Content    │     │ Prompt Inj.  │
-│ (SVM, Cosine)│     │ (NB, DeBERTa)│     │(DeBERTa-MNLI)│
-└──────┬───────┘     └──────┬───────┘     └──────┬───────┘
-       │                    │                    │
-       └───────────┐        │        ┌───────────┘
-                   ▼        ▼        ▼
-             ┌──────────────────────────┐
-             │         Agent 3          │
-             │    Synthesizer Agent     │ (Weighted Ensemble Score)
-             └──────────────┬───────────┘
-                            ▼
-                    [Final Threat Report]
+User Input / Link / Storefront
+              │
+              ▼
+┌────────────────────────────────────────────────────────────────────────┐
+│                        Preprocessed & Tokenized                        │
+└───────────────────────────────────┬────────────────────────────────────┘
+                                    │ (Parallel Execution)
+        ┌───────────────────┬───────┴───────────┬───────────────────┐
+        ▼                   ▼                   ▼                   ▼
+ ┌──────────────┐    ┌──────────────┐    ┌──────────────┐    ┌──────────────┐
+ │   Agent 1    │    │   Agent 2    │    │   Agent 4    │    │   Agent 5    │
+ │ External/URL │    │   Content    │    │ Prompt Inj.  │    │ Store Trust  │
+ │ (SVM, Cosine)│    │ (NB, DeBERTa)│    │(DeBERTa-MNLI)│    │ (Scam Signals│
+ └──────┬───────┘    └──────┬───────┘    └──────┬───────┘    └──────┬───────┘
+        │                   │                   │                   │
+        └─────────────┐     │                   │     ┌─────────────┘
+                      ▼     ▼                   ▼     ▼
+               ┌─────────────────────────────────────────┐
+               │                 Agent 3                 │
+               │            Synthesizer Agent            │ (Weighted Ensemble Score)
+               └────────────────────┬────────────────────┘
+                                    ▼
+                          [Final Threat Report]
 ```
 
 ### The 5-Agent Breakdown
-1. **Agent 1 (External Analyst)**: Uses **SVM + TF-IDF**, **SequenceMatcher** (fuzzy string matching), Cosine Similarity, and regex heuristics to compute `url_risk` and spot domain spoofing (homoglyph/typosquatting).
+1. **Agent 1 (External Analyst)**: Uses **SVM + TF-IDF**, **SequenceMatcher** (fuzzy string matching), Cosine Similarity, WHOIS age heuristics, and PhishTank / OpenPhish lookup checks to compute `url_risk` and spot domain spoofing (homoglyph/typosquatting).
 2. **Agent 2 (Content Analyst)**: Uses a hybrid ensemble of **Multinomial Naive Bayes / Logistic Regression** (30%) + **DeBERTa-v3-Small** (70%), along with **DistilBERT** for urgency/threat sentiment and **MiniLM-L6-v2** embeddings to check text-to-URL semantic divergence.
 3. **Agent 4 (Prompt Injection Detector)**: Leverages a fine-tuned **DeBERTa-v3 MNLI** model paired with rule-based heuristics (70% model + 30% rules) to detect prompt injection/jailbreak attempts.
-4. **Agent 5 (Store Trust Analyst)**: Evaluates e-commerce storefront authenticity, suspicious discounting, refund policy presence, whois domain age, and fake social proof cues.
-5. **Agent 3 (Synthesizer)**: Combines individual scores using a weighted consensus logic.
+4. **Agent 5 (Store Trust Analyst)**: Evaluates e-commerce storefront authenticity, suspicious discounting (>70% off), missing contact/refund policies, WHOIS domain creation freshness, payment gateway red flags, and fake review patterns.
+5. **Agent 3 (Synthesizer)**: Combines individual scores using a weighted consensus logic with dynamic contextual multipliers.
 
 ### ⚖️ Weighted Scoring Algorithm & Multipliers
 The Synthesizer (`Agent 3`) aggregates scores based on the following model weights:
 
 | Threat Category | Weight | Description |
 | :--- | :--- | :--- |
-| **Phishing Probability** | `0.40` | Overall semantic phishing likelihood |
-| **URL Risk** | `0.30` | Heuristics & ML evaluations of the target link |
-| **Prompt Injection** | `0.30` | Malicious prompt hijack attempts (High impact) |
-| **Spam Probability** | `0.15` | Mass mail content indicators |
-| **AI-Generated Content** | `0.10` | Automated scam copy generation markers |
+| **Phishing Probability** | `0.35` | Overall semantic phishing likelihood |
+| **URL Risk** | `0.25` | Heuristics & ML evaluations of target link |
+| **Prompt Injection** | `0.20` | Malicious prompt hijack attempts |
+| **Store Trust Risk** | `0.15` | E-commerce scam and fake storefront likelihood |
+| **Spam Probability** | `0.10` | Mass mail content indicators |
+| **AI-Generated Content** | `0.05` | Automated scam copy generation markers |
 | **Domain Similarity** | `0.05` | Likelihood of brand typosquatting or impersonation |
 
 #### 🛡️ Adjustments & Multipliers:
