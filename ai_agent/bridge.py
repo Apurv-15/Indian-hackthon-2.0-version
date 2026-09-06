@@ -44,6 +44,7 @@ def analyze():
         # Map to the schema expected by the Next.js frontend
         risk_map = {"MINIMAL": "Safe", "LOW": "Low", "MEDIUM": "Medium", "HIGH": "High", "CRITICAL": "Critical"}
         risk_level = risk_map.get(result["risk_level"], "Medium")
+        print(f"🔍 [Extension Request] Scanned: {user_input[:80]} -> Result: {risk_level} ({result['risk_level']}) | Score: {result['risk_score']}", flush=True)
 
         return jsonify({
             "riskLevel": risk_level,
