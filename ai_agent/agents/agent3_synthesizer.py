@@ -47,13 +47,16 @@ class SynthesizerAgent:
     
     def calculate_risk_score(self, agent1_results, agent2_results, agent4_results):
         """Calculate overall risk score"""
-        # If the input is a raw URL, evaluate URL-specific metrics only
+        # If the input is a raw URL, evaluate URL-specific metrics primarily
         if agent2_results.get('is_raw_url'):
-            url_risk_val = agent1_results['url_ml_risk'] if agent1_results.get('url_ml_risk', 0) > agent1_results['url_risk'] else agent1_results['url_risk']
-            # If the domain is highly similar to a legitimate brand, we treat it as high risk
+            url_risk_val = max(agent1_results.get('url_ml_risk', 0), agent1_results['url_risk'])
             domain_similarity = agent1_results.get('domain_similarity', 0)
             sim_risk = 0.95 if domain_similarity > 0.7 else (domain_similarity * 0.5)
-            return min(max(url_risk_val, sim_risk), 1.0)
+            # Agent2 now provides non-zero phishing probability for raw URLs
+            a2_phishing = agent2_results.get('phishing_probability', 0)
+            # Weighted: 70% Agent1 URL analysis, 30% Agent2 URL-text analysis
+            combined = max(url_risk_val, sim_risk) * 0.7 + a2_phishing * 0.3
+            return min(max(combined, url_risk_val, sim_risk), 1.0)
 
         risk_score = 0.0
         
