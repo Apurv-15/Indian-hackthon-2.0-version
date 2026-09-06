@@ -33,6 +33,73 @@ const TRUST_LABELS = {
     UNKNOWN: 'Unreachable'
 };
 
+function escapeHtml(value) {
+    return String(value ?? '')
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
+}
+
+function buildReviewSection(reviewSummary) {
+    if (!reviewSummary?.has_meaningful_results) {
+        return '';
+    }
+
+    const reviewText = reviewSummary.summary || '';
+    const reviewColor =
+        reviewSummary.sentiment === 'HIGH_RISK'
+            ? 'var(--high)'
+            : (reviewSummary.sentiment === 'MIXED' ? 'var(--medium)' : 'var(--safe)');
+
+    const links = Array.isArray(reviewSummary.sources)
+        ? reviewSummary.sources.filter(source => source?.name && source?.url)
+        : [];
+
+    const linksHtml = links.length
+        ? `
+            <div style="margin-top: 8px; padding-top: 6px; border-top: 1px solid rgba(255,255,255,0.08); font-size: 10px;">
+                <span style="color: var(--subtext);">Review Sources: </span>
+                <div style="display: flex; gap: 8px; margin-top: 5px; flex-wrap: wrap;">
+                    ${links.map(source => `<a href="${escapeHtml(source.url)}" target="_blank" rel="noopener noreferrer" style="color: #38bdf8; text-decoration: underline;">${escapeHtml(source.name)}</a>`).join('')}
+                </div>
+            </div>
+        `
+        : '';
+
+    const takeaways = Array.isArray(reviewSummary.takeaways) ? reviewSummary.takeaways : [];
+    const snippets = Array.isArray(reviewSummary.snippets) ? reviewSummary.snippets : [];
+    
+    const takeawaysHtml = takeaways.length > 0
+        ? `<ul style="margin: 6px 0 6px 14px; padding: 0; font-size: 10.5px; color: var(--subtext); line-height: 1.4;">
+            ${takeaways.map(t => `<li style="margin-bottom: 2px;">${escapeHtml(t)}</li>`).join('')}
+           </ul>`
+        : '';
+
+    const snippetsHtml = snippets.length > 0
+        ? `<div style="margin-top: 6px;">
+            <button id="popup-expand-reviews-btn" style="background: rgba(255,255,255,0.08); border: 1px solid rgba(255,255,255,0.15); color: #38bdf8; padding: 3px 8px; border-radius: 6px; font-size: 10px; cursor: pointer; font-weight: 600;">
+                📖 Read Detailed Snippets (${snippets.length}) ▼
+            </button>
+            <div id="popup-detailed-snippets" style="display: none; margin-top: 6px; padding: 6px 8px; background: rgba(0,0,0,0.3); border-radius: 6px; font-size: 10px; color: var(--subtext); max-height: 100px; overflow-y: auto; line-height: 1.4;">
+                ${snippets.map((s, idx) => `<div style="margin-bottom: 4px; padding-bottom: 4px; border-bottom: 1px solid rgba(255,255,255,0.05); font-style: italic;">"${escapeHtml(s)}"</div>`).join('')}
+            </div>
+           </div>`
+        : '';
+
+    return `
+        <div class="status-label">Customer Reviews & Sentiment</div>
+        <div style="font-size: 11px; background: rgba(255,255,255,0.03); padding: 8px; border-radius: 6px; margin-bottom: 8px;">
+            <strong style="color: ${reviewColor}">${escapeHtml(reviewSummary.rating_label || 'Analyzed')}</strong>
+            <div style="color: #e2e8f0; margin-top: 3px; line-height: 1.4;">${escapeHtml(reviewText)}</div>
+            ${takeawaysHtml}
+            ${snippetsHtml}
+            ${linksHtml}
+        </div>
+    `;
+}
+
 document.getElementById('check-store').addEventListener('click', async () => {
     const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
     const button = document.getElementById('check-store');
@@ -62,12 +129,38 @@ document.getElementById('check-store').addEventListener('click', async () => {
         const reasons = (data.reasons || []).map(r => `<li>${r}</li>`).join('');
         const recs = (data.recommendations || []).map(r => `<li>${r}</li>`).join('');
 
+        const gstinBadge = data.gstin_valid ? '<span style="color: var(--safe)">✓ Valid Checksum</span>' : (data.gstin ? '<span style="color: var(--high)">✗ Invalid</span>' : '<span style="color: var(--medium)">Not Found</span>');
+        const paymentBadges = (data.payment_gateways && data.payment_gateways.length) ? data.payment_gateways.join(', ') : (data.signals?.has_upi_only ? '<span style="color: var(--high)">⚠️ UPI Only</span>' : 'Standard');
+        const domainAgeText = data.domain_age?.age_text || 'Active';
+        const reviewSectionHtml = buildReviewSection(data.review_summary);
+
         resultBox.innerHTML = `
-            <div class="trust-score-line" style="color: ${color}">${label} — ${Math.round((data.trust_score || 0) * 100)}%</div>
-            <div class="status-label">Signals</div>
+            <div class="trust-score-line" style="color: ${color}; font-size: 14px; font-weight: bold; margin-bottom: 8px;">${label} — ${Math.round((data.trust_score || 0) * 100)}% Trust</div>
+            
+            <div style="background: rgba(255,255,255,0.05); padding: 8px; border-radius: 8px; margin-bottom: 8px; font-size: 11px;">
+                <div>🏛️ <strong>GSTIN:</strong> ${gstinBadge} ${data.gstin ? `(${data.gstin})` : ''}</div>
+                <div style="margin-top: 4px;">💳 <strong>Payments:</strong> ${paymentBadges}</div>
+                <div style="margin-top: 4px;">📅 <strong>Age:</strong> ${domainAgeText}</div>
+            </div>
+
+            ${reviewSectionHtml}
+
+            <div class="status-label">Legitimacy Signals</div>
             <ul>${reasons}</ul>
             <div class="status-label">Recommendations</div>
             <ul>${recs}</ul>
         `;
+
+        const expandBtn = document.getElementById('popup-expand-reviews-btn');
+        const snippetsBox = document.getElementById('popup-detailed-snippets');
+        if (expandBtn && snippetsBox) {
+            expandBtn.addEventListener('click', () => {
+                const isOpen = snippetsBox.style.display === 'block';
+                snippetsBox.style.display = isOpen ? 'none' : 'block';
+                expandBtn.textContent = isOpen
+                    ? `📖 Read Detailed Snippets (${data.review_summary?.snippets?.length || 0}) ▼`
+                    : `📖 Hide Detailed Snippets ▲`;
+            });
+        }
     });
 });
