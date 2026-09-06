@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
   "name": "AegisAI Phishing Shield",
-  "version": "1.0",
-  "description": "Real-time AI-powered phishing detection for your browser.",
+  "version": "1.1.0",
+  "description": "Real-time AI-powered multi-agent phishing & store trust detection for your browser.",
   "permissions": [
     "contextMenus",
     "tabs",
