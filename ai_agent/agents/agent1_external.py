@@ -56,7 +56,10 @@ class ExternalAnalysisAgent:
         model_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'models')
         try:
             with open(os.path.join(model_dir, 'phishing_new.pkl'), 'rb') as f:
-                self.url_ml_model = pickle.load(f)  # SVM classifier
+                self.url_ml_model = pickle.load(f)  # SVM / LogisticRegression classifier
+                # Patch for sklearn version mismatch (model pickled with newer version)
+                if hasattr(self.url_ml_model, '_estimator_type') and not hasattr(self.url_ml_model, 'multi_class'):
+                    self.url_ml_model.multi_class = 'auto'
             with open(os.path.join(model_dir, 'vectorizerurl_new.pkl'), 'rb') as f:
                 self.url_vectorizer = pickle.load(f)  # TF-IDF feature extractor
             self.has_url_ml = True
@@ -90,9 +93,28 @@ class ExternalAnalysisAgent:
         
         self.suspicious_tlds = ['.xyz', '.top', '.club', '.online', '.site', '.win', '.bid']
         
-        self.legitimate_domains = ['google.com', 'microsoft.com', 'amazon.com', 'paypal.com', 'apple.com']
+        self.legitimate_brand_domains = {
+            'google': ['google.com', 'google.co.in', 'gmail.com', 'youtube.com'],
+            'microsoft': ['microsoft.com', 'live.com', 'office.com', 'outlook.com'],
+            'amazon': ['amazon.com', 'amazon.in', 'amazon.co.uk'],
+            'paypal': ['paypal.com'],
+            'apple': ['apple.com', 'icloud.com'],
+            'netflix': ['netflix.com'],
+            'facebook': ['facebook.com', 'fb.com'],
+            'instagram': ['instagram.com'],
+            'chase': ['chase.com'],
+            'wellsfargo': ['wellsfargo.com'],
+            'openai': ['openai.com', 'chatgpt.com'],
+            'linkedin': ['linkedin.com'],
+            'github': ['github.com']
+        }
+        self.legitimate_domains = [domain for domains in self.legitimate_brand_domains.values() for domain in domains]
         
         self.pattern_embeddings = self.model.encode(self.phishing_patterns)
+        
+        # Load PhishTank verified phishing URL database
+        self.phishtank_urls = self.load_phishtank_database()
+        
         print("External Analysis Agent loaded successfully!")
     
     def check_url_live(self, url):
@@ -116,10 +138,103 @@ class ExternalAnalysisAgent:
             pass
         return result
 
+    def load_phishtank_database(self):
+        """
+        Load PhishTank verified phishing database (free, no API key).
+        Downloads once and caches locally. Re-downloads if older than 24h.
+        """
+        import json, time
+        data_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'data')
+        os.makedirs(data_dir, exist_ok=True)
+        cache_path = os.path.join(data_dir, 'phishtank_cache.json')
+        
+        # Check if cache exists and is fresh (< 24 hours)
+        if os.path.exists(cache_path):
+            age_hours = (time.time() - os.path.getmtime(cache_path)) / 3600
+            if age_hours < 24:
+                try:
+                    with open(cache_path, 'r') as f:
+                        urls = set(json.load(f))
+                    print(f"PhishTank: Loaded {len(urls)} URLs from cache ({age_hours:.1f}h old).")
+                    return urls
+                except Exception:
+                    pass
+        
+        # Download fresh database
+        print("PhishTank: Downloading latest verified phishing database...")
+        try:
+            resp = requests.get(
+                'http://data.phishtank.com/data/online-valid.json',
+                timeout=30,
+                headers={'User-Agent': 'phishtank/aegisai'}
+            )
+            if resp.status_code == 200:
+                data = resp.json()
+                urls = set()
+                for entry in data:
+                    url = entry.get('url', '').strip().rstrip('/')
+                    if url:
+                        urls.add(url.lower())
+                # Cache it
+                with open(cache_path, 'w') as f:
+                    json.dump(list(urls), f)
+                print(f"PhishTank: Downloaded and cached {len(urls)} verified phishing URLs.")
+                return urls
+            else:
+                print(f"PhishTank: HTTP {resp.status_code}, using empty set.")
+                return set()
+        except Exception as e:
+            print(f"PhishTank: Download failed ({e}), using empty set.")
+            return set()
+    
+    def check_phishtank(self, url):
+        """Check if URL is in the PhishTank verified phishing database."""
+        normalized = url.lower().strip().rstrip('/')
+        if normalized in self.phishtank_urls:
+            return True
+        # Also check without trailing path variants
+        from urllib.parse import urlparse
+        parsed = urlparse(normalized)
+        base = f"{parsed.scheme}://{parsed.netloc}"
+        if base in self.phishtank_urls:
+            return True
+        return False
+
     def analyze_url_risk(self, url):
         """Analyze URL for suspicious patterns"""
         risk_score = 0.0
         reasons = []
+
+        # Real Threat Intelligence Check (PhishTank database)
+        if self.check_phishtank(url):
+            risk_score = 1.0
+            reasons.append("CRITICAL: URL found in PhishTank verified phishing database")
+            return risk_score, reasons, 1.0
+
+        # Optional: Google Safe Browsing API (if key is provided)
+        api_key = os.environ.get('GOOGLE_SAFE_BROWSING_API_KEY')
+        if api_key:
+            try:
+                endpoint = f"https://safebrowsing.googleapis.com/v4/threatMatches:find?key={api_key}"
+                payload = {
+                    "client": {"clientId": "aegisai", "clientVersion": "1.0"},
+                    "threatInfo": {
+                        "threatTypes": ["MALWARE", "SOCIAL_ENGINEERING", "UNWANTED_SOFTWARE"],
+                        "platformTypes": ["ANY_PLATFORM"],
+                        "threatEntryTypes": ["URL"],
+                        "threatEntries": [{"url": url}]
+                    }
+                }
+                resp = requests.post(endpoint, json=payload, timeout=3)
+                if resp.status_code == 200:
+                    data = resp.json()
+                    if 'matches' in data and len(data['matches']) > 0:
+                        threats = [m.get('threatType', 'UNKNOWN') for m in data['matches']]
+                        risk_score = 1.0
+                        reasons.append(f"CRITICAL: Google Safe Browsing flagged this URL: {', '.join(set(threats))}")
+                        return risk_score, reasons, 1.0
+            except Exception as e:
+                print(f"Safe Browsing API Error: {e}")
 
         live = self.check_url_live(url)
         if not live['reachable']:
@@ -158,12 +273,22 @@ class ExternalAnalysisAgent:
                 reasons.append(f"URL shortening service detected: {service}")
                 break
         
-        suspicious_keywords = ['login', 'signin', 'verify', 'account', 'secure', 'update', 'confirm']
-        for keyword in suspicious_keywords:
-            if keyword in url.lower():
-                risk_score += 0.1
-                reasons.append(f"Suspicious keyword in URL: '{keyword}'")
-                break
+        suspicious_keywords = ['login', 'signin', 'verify', 'account', 'secure', 'update', 'confirm', 'suspended', 'security', 'banking', 'password', 'validation', 'authenticate']
+        matched_keywords = [kw for kw in suspicious_keywords if kw in url.lower()]
+        if matched_keywords:
+            keyword_boost = min(0.1 * len(matched_keywords), 0.5)
+            risk_score += keyword_boost
+            reasons.append(f"Suspicious keyword(s) in URL: {', '.join(repr(k) for k in matched_keywords)}")
+
+        # Brand impersonation: URL contains a brand name but domain is not official
+        for brand, official_domains in self.legitimate_brand_domains.items():
+            if brand in url.lower():
+                domain = self.extract_domain(url).lower()
+                is_official = any(domain == d or domain.endswith('.' + d) for d in official_domains)
+                if not is_official:
+                    risk_score = max(risk_score, 0.85)
+                    reasons.append(f"Brand impersonation: '{brand}' appears in URL but domain is not an official {brand} domain")
+                    break
         
         domain_similarity = self.check_domain_similarity(url)
         if domain_similarity > 0.7:
