@@ -1,7 +1,7 @@
 {
-  "name": "react-example",
+  "name": "aegisai-threat-shield",
   "private": true,
-  "version": "0.0.0",
+  "version": "1.1.0",
   "type": "module",
   "scripts": {
     "dev": "next dev -p 3001",
