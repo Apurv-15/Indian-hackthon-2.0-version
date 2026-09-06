@@ -47,11 +47,12 @@ User Input / Link
                     [Final Threat Report]
 ```
 
-### The 4-Agent Breakdown
+### The 5-Agent Breakdown
 1. **Agent 1 (External Analyst)**: Uses **SVM + TF-IDF**, **SequenceMatcher** (fuzzy string matching), Cosine Similarity, and regex heuristics to compute `url_risk` and spot domain spoofing (homoglyph/typosquatting).
 2. **Agent 2 (Content Analyst)**: Uses a hybrid ensemble of **Multinomial Naive Bayes / Logistic Regression** (30%) + **DeBERTa-v3-Small** (70%), along with **DistilBERT** for urgency/threat sentiment and **MiniLM-L6-v2** embeddings to check text-to-URL semantic divergence.
 3. **Agent 4 (Prompt Injection Detector)**: Leverages a fine-tuned **DeBERTa-v3 MNLI** model paired with rule-based heuristics (70% model + 30% rules) to detect prompt injection/jailbreak attempts.
-4. **Agent 3 (Synthesizer)**: Combines individual scores using a weighted consensus logic.
+4. **Agent 5 (Store Trust Analyst)**: Evaluates e-commerce storefront authenticity, suspicious discounting, refund policy presence, whois domain age, and fake social proof cues.
+5. **Agent 3 (Synthesizer)**: Combines individual scores using a weighted consensus logic.
 
 ### ⚖️ Weighted Scoring Algorithm & Multipliers
 The Synthesizer (`Agent 3`) aggregates scores based on the following model weights:
