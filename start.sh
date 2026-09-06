@@ -16,6 +16,12 @@ PORT=5001
 
 echo "🛡️ Starting AegisAI Integrated System..."
 
+# Auto-clear previous caches
+echo "🧹 Clearing previous build caches & logs..."
+find "$PROJECT_ROOT" -type d -name "__pycache__" -exec rm -rf "{}" + 2>/dev/null
+find "$PROJECT_ROOT" -type f -name "*.pyc" -delete 2>/dev/null
+rm -rf "$PROJECT_ROOT/.next" "$PROJECT_ROOT/ai_agent/.gradio" "$PROJECT_ROOT/ai_agent/bridge.log"
+
 # 1. Start Python Bridge in the background
 echo "🚀 Launching AI Inference Engine..."
 export HF_HUB_OFFLINE=1
