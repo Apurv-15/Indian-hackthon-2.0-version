@@ -52,11 +52,26 @@ class SynthesizerAgent:
             url_risk_val = max(agent1_results.get('url_ml_risk', 0), agent1_results['url_risk'])
             domain_similarity = agent1_results.get('domain_similarity', 0)
             sim_risk = 0.95 if domain_similarity > 0.7 else (domain_similarity * 0.5)
-            # Agent2 now provides non-zero phishing probability for raw URLs
             a2_phishing = agent2_results.get('phishing_probability', 0)
-            # Weighted: 70% Agent1 URL analysis, 30% Agent2 URL-text analysis
-            combined = max(url_risk_val, sim_risk) * 0.7 + a2_phishing * 0.3
-            return min(max(combined, url_risk_val, sim_risk), 1.0)
+
+            # Factor in anchor-text semantic divergence if provided
+            connection_score = agent2_results.get('connection_score', 1.0)
+            divergence_penalty = 0.0
+            if connection_score < 0.25:
+                divergence_penalty = 0.65
+            elif connection_score < 0.5:
+                divergence_penalty = 0.35
+
+            # If the URL is clean (no heuristic flags, no typosquatting, no phishing keywords/divergence)
+            if agent1_results.get('url_risk', 0) == 0.0 and domain_similarity == 0.0 and a2_phishing == 0.0 and divergence_penalty == 0.0:
+                # Dampen raw ML noise on clean URLs (prevents false positives on benign websites)
+                url_risk_val = min(url_risk_val, 0.20)
+
+            # Weighted: 70% Agent1 URL analysis, 30% Agent2 URL-text analysis + divergence
+            combined = max(url_risk_val, sim_risk) * 0.7 + a2_phishing * 0.3 + divergence_penalty
+            return min(max(combined, url_risk_val, sim_risk, divergence_penalty), 1.0)
+
+
 
         risk_score = 0.0
         
@@ -121,6 +136,9 @@ class SynthesizerAgent:
         
         if agent2_results.get('spam_probability', 0) > 0.7 or agent2_results.get('spam_ml_score', 0) > 0.7:
             threats.append("Spam")
+        
+        if agent2_results.get('connection_score', 1.0) < 0.4:
+            threats.append("Deceptive Link Label (Divergence)")
         
         if not threats and risk_score > 0.3:
             threats.append("Suspicious Content")

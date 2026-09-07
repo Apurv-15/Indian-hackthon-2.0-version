@@ -4,7 +4,7 @@ const PYTHON_BRIDGE_URL = "http://127.0.0.1:5001/analyze";
 
 export async function POST(req: Request) {
   try {
-    const { input } = await req.json();
+    const { input, anchorText, pageUrl } = await req.json();
 
     if (!input || typeof input !== "string" || !input.trim()) {
       return NextResponse.json({ error: "No input provided" }, { status: 400 });
@@ -16,10 +16,15 @@ export async function POST(req: Request) {
       bridgeResponse = await fetch(PYTHON_BRIDGE_URL, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ input: input.trim() }),
+        body: JSON.stringify({
+          input: input.trim(),
+          anchor_text: anchorText || "",
+          page_url: pageUrl || "",
+        }),
         // 30 s timeout (first cold-start may need a bit more during dev)
         signal: AbortSignal.timeout(30_000),
       });
+
     } catch (fetchError: any) {
       console.error("Bridge unreachable:", fetchError.message);
       return NextResponse.json(

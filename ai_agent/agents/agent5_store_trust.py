@@ -422,13 +422,14 @@ class StoreTrustAgent:
         elif has_upi_only:
             trust_score -= 0.25
         else:
-            trust_score += 0.10  # standard cart checkout
+            trust_score += 0.00  # Unverified/unrecognized payment methods grant 0 trust bonus
 
         # GSTIN contributes up to 20%
         if signals['gstin_checksum_valid']:
             trust_score += 0.20
         elif signals['gstin_found']:
             trust_score += 0.05
+
 
         # Policies & Contact Info contribute 10%
         if len(policies_found) >= 2 or signals['contact_info']:

@@ -6,9 +6,13 @@ const storeTrustCache = new Map();
 chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
   if (request.action === "analyze") {
     const input = request.input;
-    if (cache.has(input)) {
-        console.log("Serving from cache:", input);
-        sendResponse(cache.get(input));
+    const anchorText = request.anchorText || "";
+    const pageUrl = request.pageUrl || "";
+    const cacheKey = `${input}::${anchorText}`;
+
+    if (cache.has(cacheKey)) {
+        console.log("Serving from cache:", cacheKey);
+        sendResponse(cache.get(cacheKey));
         return true;
     }
 
@@ -17,11 +21,15 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
       headers: {
         "Content-Type": "application/json"
       },
-      body: JSON.stringify({ input: input })
+      body: JSON.stringify({
+        input: input,
+        anchor_text: anchorText,
+        page_url: pageUrl
+      })
     })
     .then(response => response.json())
     .then(data => {
-      cache.set(input, data);
+      cache.set(cacheKey, data);
       sendResponse(data);
     })
     .catch(error => {
@@ -30,6 +38,7 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
     });
     return true; // Keep message channel open for async response
   }
+
 
   if (request.action === "storeTrust") {
     const url = request.url;

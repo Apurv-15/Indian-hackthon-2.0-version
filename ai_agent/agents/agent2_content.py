@@ -66,10 +66,13 @@ class ContentAnalysisAgent:
         try:
             with open(os.path.join(model_dir, 'model_new.pkl'), 'rb') as f:
                 self.scikit_model = pickle.load(f)
+                if hasattr(self.scikit_model, '_estimator_type') and not hasattr(self.scikit_model, 'multi_class'):
+                    self.scikit_model.multi_class = 'auto'
             with open(os.path.join(model_dir, 'vectorizer_new.pkl'), 'rb') as f:
                 self.scikit_vectorizer = pickle.load(f)
             self.has_text_ml = True
             print("Successfully loaded text ML models.")
+
         except Exception as e:
             print(f"Failed to load text ML models: {e}")
             self.has_text_ml = False
@@ -204,13 +207,26 @@ class ContentAnalysisAgent:
             # Extract domain parts
             domain = url_lower.replace('http://', '').replace('https://', '').replace('www.', '').split('/')[0]
 
-            # Heuristic: If email mentions a brand, but the URL is not the official domain of that brand
+            # Heuristic: If email/anchor text mentions a brand, but the URL is not the official domain of that brand
             brands = {
                 'paypal': 'paypal.com',
                 'google': 'google.com',
                 'microsoft': 'microsoft.com',
                 'amazon': 'amazon.com',
-                'apple': 'apple.com'
+                'apple': 'apple.com',
+                'netflix': 'netflix.com',
+                'sbi': 'sbi.co.in',
+                'hdfc': 'hdfcbank.com',
+                'icici': 'icicibank.com',
+                'axis': 'axisbank.com',
+                'kotak': 'kotak.com',
+                'paytm': 'paytm.com',
+                'phonepe': 'phonepe.com',
+                'indiapost': 'indiapost.gov.in',
+                'shiprocket': 'shiprocket.in',
+                'bluedart': 'bluedart.com',
+                'binance': 'binance.com',
+                'metamask': 'metamask.io'
             }
 
             score = 1.0
@@ -220,7 +236,7 @@ class ContentAnalysisAgent:
                     if brand in domain and official not in domain:
                         # High divergence (brand impersonation)
                         score = min(score, 0.1)
-                    elif brand not in domain:
+                    elif official not in domain and domain != official:
                         # Moderate divergence (URL doesn't match the brand mentioned)
                         score = min(score, 0.3)
 
@@ -228,16 +244,17 @@ class ContentAnalysisAgent:
 
         avg_score = sum(connection_scores) / len(connection_scores)
         if avg_score < 0.2:
-            return avg_score, "High divergence: URL content does not match email context (Heuristic)"
+            return avg_score, "High divergence: Link text mentions a brand but destination points elsewhere"
         elif avg_score < 0.5:
-            return avg_score, "Moderate divergence: URL seems loosely related to email context (Heuristic)"
+            return avg_score, "Moderate divergence: Link text and destination domain seem loosely related"
         else:
-            return avg_score, "Stable: URL matches email context (Heuristic)"
+            return avg_score, "Stable: Link destination matches context"
 
     def analyze(self, input_data):
         """Main analysis function with hybrid and connection logic"""
         text = input_data['cleaned_text']
         urls = input_data['urls']
+        anchor_text = input_data.get('anchor_text', '').strip()
 
         # Check if the input is a raw URL
         is_raw_url = False
@@ -246,23 +263,53 @@ class ContentAnalysisAgent:
             is_raw_url = True
 
         if is_raw_url:
-            # Even for raw URLs, run the ML model on the URL string itself
-            # The TF-IDF vectorizer can extract useful features from URL text
-            spam_ml_prob = 0.0
-            if self.has_text_ml:
-                try:
-                    features = self.scikit_vectorizer.transform([text_stripped])
-                    spam_ml_prob = self.scikit_model.predict_proba(features)[0][1]
-                except Exception:
-                    pass
+            from urllib.parse import urlparse
+            try:
+                parsed_host = urlparse(text_stripped).netloc.lower().split(':')[0]
+                if parsed_host.startswith('www.'):
+                    parsed_host = parsed_host[4:]
+            except Exception:
+                parsed_host = ""
+
+            legit_hosts = {
+                'google.com', 'google.co.in', 'youtube.com', 'gmail.com',
+                'microsoft.com', 'live.com', 'office.com', 'outlook.com',
+                'amazon.com', 'amazon.in', 'amazon.co.uk',
+                'paypal.com', 'apple.com', 'icloud.com', 'netflix.com',
+                'facebook.com', 'fb.com', 'instagram.com', 'chase.com',
+                'wellsfargo.com', 'openai.com', 'chatgpt.com', 'linkedin.com',
+                'github.com', 'sbi.co.in', 'onlinesbi.sbi', 'onlinesbi.com',
+                'hdfcbank.com', 'hdfc.com', 'icicibank.com', 'axisbank.com',
+                'kotak.com', 'paytm.com', 'phonepe.com', 'indiapost.gov.in',
+                'shiprocket.in', 'shiprocket.com', 'bluedart.com'
+            }
+            is_official = any(parsed_host == h or parsed_host.endswith('.' + h) for h in legit_hosts)
+
+            if is_official:
+                url_keyword_matches = []
+                url_phishing_score = 0.0
+                spam_ml_prob = 0.0
+            else:
+                url_lower = text_stripped.lower()
+                url_keyword_matches = [kw for kw in self.phishing_keywords if kw in url_lower]
+                url_phishing_score = min(len(url_keyword_matches) * 0.15, 0.6)
+                spam_ml_prob = 0.0
+
+            # Check semantic divergence if anchor text was provided from extension
+            connection_score = 1.0
+            connection_msg = "Raw URL — content analysis limited to URL structure"
+            divergence_boost = 0.0
+            if anchor_text:
+                connection_score, connection_msg = self.analyze_connection(anchor_text, [text_stripped])
+                if connection_score < 0.2:
+                    divergence_boost = 0.55
+                elif connection_score < 0.5:
+                    divergence_boost = 0.30
             
-            # Also check for phishing keywords in the URL path
-            url_lower = text_stripped.lower()
-            url_keyword_matches = [kw for kw in self.phishing_keywords if kw in url_lower]
-            url_phishing_score = min(len(url_keyword_matches) * 0.15, 0.6)
-            
+            combined_phish = min(max(url_phishing_score, spam_ml_prob * 0.5) + divergence_boost, 1.0)
+
             return {
-                'phishing_probability': max(url_phishing_score, spam_ml_prob * 0.5),
+                'phishing_probability': combined_phish,
                 'prompt_injection': False,
                 'prompt_injection_patterns': [],
                 'ai_generated_probability': 0.0,
@@ -275,10 +322,12 @@ class ContentAnalysisAgent:
                 'using_transformer': False,
                 'sentiment_score': 0.0,
                 'sentiment_label': "UNKNOWN",
-                'connection_score': 1.0,
-                'connection_message': "Raw URL — content analysis limited to URL structure",
-                'is_raw_url': True
+                'connection_score': connection_score,
+                'connection_message': connection_msg,
+                'is_raw_url': True,
+                'anchor_text': anchor_text
             }
+
 
         # Benign baseline check for short / common messages
         benign_greetings = ['hi', 'hii', 'hiii', 'hello', 'hey', 'how are you', 'how is this', 'test']

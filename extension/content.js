@@ -89,7 +89,9 @@ document.addEventListener("mouseover", (e) => {
       // Scan automatically on hover
       try {
           if (!chrome.runtime?.id) return;
-          chrome.runtime.sendMessage({ action: "analyze", input: target.href }, (response) => {
+          const anchorText = (target.innerText || target.title || target.getAttribute("aria-label") || "").trim();
+          const pageUrl = window.location.href;
+          chrome.runtime.sendMessage({ action: "analyze", input: target.href, anchorText: anchorText, pageUrl: pageUrl }, (response) => {
               if (chrome.runtime.lastError) {
                   console.warn("AegisAI extension context invalidated or reloaded.");
                   return;
@@ -165,7 +167,9 @@ function scanAllLinks() {
 
         try {
             if (!chrome.runtime?.id) return;
-            chrome.runtime.sendMessage({ action: "analyze", input: target.href }, (response) => {
+            const anchorText = (target.innerText || target.title || target.getAttribute("aria-label") || "").trim();
+            const pageUrl = window.location.href;
+            chrome.runtime.sendMessage({ action: "analyze", input: target.href, anchorText: anchorText, pageUrl: pageUrl }, (response) => {
                 if (chrome.runtime.lastError) return;
                 if (response && !response.error) {
                     target.dataset.aegisResult = JSON.stringify(response);
@@ -186,6 +190,7 @@ function scanAllLinks() {
         }
     });
 }
+
 
 // Handle messages from background or popup
 chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {

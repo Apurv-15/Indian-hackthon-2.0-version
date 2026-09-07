@@ -34,17 +34,20 @@ def health():
 def analyze():
     data = request.get_json(silent=True) or {}
     user_input = data.get("input", "").strip()
+    anchor_text = (data.get("anchor_text") or data.get("anchorText") or "").strip()
+    page_url = (data.get("page_url") or data.get("pageUrl") or "").strip()
 
     if not user_input:
         return jsonify({"error": "No input provided"}), 400
 
     try:
-        result = system.analyze(user_input)
+        result = system.analyze(user_input, anchor_text=anchor_text, page_url=page_url)
 
         # Map to the schema expected by the Next.js frontend
         risk_map = {"MINIMAL": "Safe", "LOW": "Low", "MEDIUM": "Medium", "HIGH": "High", "CRITICAL": "Critical"}
         risk_level = risk_map.get(result["risk_level"], "Medium")
-        print(f"🔍 [Extension Request] Scanned: {user_input[:80]} -> Result: {risk_level} ({result['risk_level']}) | Score: {result['risk_score']}", flush=True)
+        print(f"🔍 [Extension Request] Scanned: {user_input[:80]} | Anchor: '{anchor_text[:30]}' -> Result: {risk_level} ({result['risk_level']}) | Score: {result['risk_score']}", flush=True)
+
 
         return jsonify({
             "riskLevel": risk_level,

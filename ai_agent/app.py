@@ -31,13 +31,13 @@ class ThreatDetectionSystem:
         self.agent4 = PromptInjectionAgent()
         print("System initialized!")
     
-    def analyze(self, user_input):
+    def analyze(self, user_input, anchor_text=None, page_url=None):
         """Main analysis pipeline"""
         start_time = time.time()
         
         # Step 1: Preprocess
         print("🔍 Preprocessing...")
-        preprocessed = self.preprocessor.preprocess(user_input)
+        preprocessed = self.preprocessor.preprocess(user_input, anchor_text=anchor_text, page_url=page_url)
         
         # Step 2: Run agents
         print("🤖 Running Analysis Agents (External, Content, Prompt)...")
