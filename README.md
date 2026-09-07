@@ -110,15 +110,49 @@ pip install -r requirements.txt
 
 ### 3. Running the System
 
-Start the Flask bridge server (loads the AI models into memory once for low-latency inference):
+#### ⚡ Quick Start (Recommended — One Command)
+
+You can launch both the **Python AI Inference Engine** and the **Next.js Threat Dashboard** simultaneously using the automated startup script:
+
+**On Linux / macOS:**
+```bash
+# Ensure execution permissions (first time only)
+chmod +x start.sh
+
+# Run the unified system
+./start.sh
+```
+
+**On Windows (PowerShell):**
+```powershell
+.\start.ps1
+```
+
+> **What `start.sh` does automatically:**
+> 1. Cleans up previous `.pycache`, `.next`, and log caches.
+> 2. Detects your virtual environment (`.venv` / `venv` / system `python3`).
+> 3. Launches the Flask AI bridge server on port `5001` in the background.
+> 4. Health-checks `http://localhost:5001/health` until ML transformer models are loaded into memory.
+> 5. Launches the Next.js dev server (`npm run dev`) on `http://localhost:3000`.
+> 6. Handles graceful shutdown of all backend processes upon `Ctrl+C`.
+
+---
+
+#### 🛠️ Manual Startup (Alternative)
+
+If you prefer running services in separate terminal windows:
+
+**Terminal 1 — Python AI Inference Bridge:**
 ```bash
 python ai_agent/bridge.py
 ```
 
-Start the Next.js threat dashboard:
+**Terminal 2 — Next.js Dashboard:**
 ```bash
-pnpm dev
+npm run dev
+# or: pnpm dev
 ```
+
 
 ### 4. Installing the Browser Extension
 1. Open Chrome and navigate to `chrome://extensions/`.
