@@ -219,7 +219,7 @@ function isEcommerceSite() {
         return false;
     }
 
-    return (hasShopify || hasWoo || (hasCart && hasCheckout) || (hasCart && hasPrice));
+    return (hasShopify || hasWoo || (hasCart && hasCheckout));
 }
 
 function injectStoreTrustBadge() {

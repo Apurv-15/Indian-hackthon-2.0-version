@@ -39,7 +39,8 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
     const input = request.input;
     const anchorText = request.anchorText || "";
     const pageUrl = request.pageUrl || "";
-    const cacheKey = `${input}::${anchorText}`;
+    const normalizedAnchor = anchorText.trim().toLowerCase().slice(0, 40);
+    const cacheKey = `${input}::${normalizedAnchor}`;
 
     const cachedData = getBoundedCache(cache, cacheKey);
     if (cachedData) {

@@ -276,13 +276,22 @@ class SynthesizerAgent:
         )
         
         # Confidence: Dynamically reflects certainty in the verdict
-        # Higher confidence when risk_score is closer to extremes (0.0 or 1.0)
-        # For Safe / Minimal threats, certainty in legitimacy is 95%+
-        if risk_level == "MINIMAL" or risk_score <= 0.15:
-            confidence = max(0.95, 1.0 - risk_score)
+        # Tier-based formula based on distance from threshold boundaries
+        if risk_score <= 0.15:
+            confidence = 0.97
+        elif risk_score < self.thresholds['low']:  # < 0.22
+            confidence = 0.90
+        elif risk_score < self.thresholds['medium']:  # < 0.50
+            margin = (self.thresholds['medium'] - risk_score) / (self.thresholds['medium'] - self.thresholds['low'])
+            confidence = 0.60 + margin * 0.25
+        elif risk_score < self.thresholds['high']:  # < 0.80
+            margin = (risk_score - self.thresholds['medium']) / (self.thresholds['high'] - self.thresholds['medium'])
+            confidence = 0.65 + margin * 0.20
+        elif risk_score < self.thresholds['critical']:  # < 0.95
+            margin = (risk_score - self.thresholds['high']) / (self.thresholds['critical'] - self.thresholds['high'])
+            confidence = 0.80 + margin * 0.15
         else:
-            distance_from_borderline = abs(risk_score - 0.5)
-            confidence = 0.5 + distance_from_borderline
+            confidence = 0.97
 
         
         result = {
