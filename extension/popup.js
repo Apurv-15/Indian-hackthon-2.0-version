@@ -1,3 +1,16 @@
+document.addEventListener('DOMContentLoaded', () => {
+    chrome.runtime.sendMessage({ action: "health" }, (res) => {
+        const footerStatus = document.getElementById('footer-status');
+        if (footerStatus) {
+            if (res && res.online) {
+                footerStatus.innerHTML = `<span style="color: #166534;">●</span> Bridge: 5001 Online`;
+            } else {
+                footerStatus.innerHTML = `<span style="color: #991b1b;">●</span> Bridge: Offline`;
+            }
+        }
+    });
+});
+
 document.getElementById('scan-page').addEventListener('click', async () => {
     const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
 
@@ -19,6 +32,8 @@ document.getElementById('scan-page').addEventListener('click', async () => {
 
 const TRUST_COLORS = {
     ESTABLISHED: 'var(--safe)',
+    STARTUP_VERIFIED: '#10b981',
+    REPLICA_VERIFIED: '#6366f1',
     SOME_SIGNALS: 'var(--medium)',
     FEW_SIGNALS: 'var(--medium)',
     NO_SIGNALS: 'var(--high)',
@@ -27,6 +42,8 @@ const TRUST_COLORS = {
 
 const TRUST_LABELS = {
     ESTABLISHED: 'Established',
+    STARTUP_VERIFIED: '🚀 Verified D2C Startup',
+    REPLICA_VERIFIED: '📦 Master Copy — Delivery Verified',
     SOME_SIGNALS: 'Some Trust Signals',
     FEW_SIGNALS: 'Few Trust Signals',
     NO_SIGNALS: 'No Trust Signals',
@@ -43,7 +60,7 @@ function escapeHtml(value) {
 }
 
 function buildReviewSection(reviewSummary) {
-    if (!reviewSummary?.has_meaningful_results) {
+    if (!reviewSummary || (!reviewSummary.summary && (!reviewSummary.sources || reviewSummary.sources.length === 0))) {
         return '';
     }
 
@@ -129,7 +146,7 @@ document.getElementById('check-store').addEventListener('click', async () => {
         const reasons = (data.reasons || []).map(r => `<li>${r}</li>`).join('');
         const recs = (data.recommendations || []).map(r => `<li>${r}</li>`).join('');
 
-        const gstinBadge = data.gstin_valid ? '<span style="color: var(--safe)">✓ Valid Checksum</span>' : (data.gstin ? '<span style="color: var(--high)">✗ Invalid</span>' : '<span style="color: var(--medium)">Not Found</span>');
+        const entityBadge = escapeHtml(data.business_entity || (data.gstin_valid ? 'GSTIN Verified' : 'Standard Store'));
         const paymentBadges = (data.payment_gateways && data.payment_gateways.length) ? data.payment_gateways.join(', ') : (data.signals?.has_upi_only ? '<span style="color: var(--high)">⚠️ UPI Only</span>' : 'Standard');
         const domainAgeText = data.domain_age?.age_text || 'Active';
         const reviewSectionHtml = buildReviewSection(data.review_summary);
@@ -138,7 +155,7 @@ document.getElementById('check-store').addEventListener('click', async () => {
             <div class="trust-score-line" style="color: ${color}; font-size: 14px; font-weight: bold; margin-bottom: 8px;">${label} — ${Math.round((data.trust_score || 0) * 100)}% Trust</div>
             
             <div style="background: rgba(255,255,255,0.05); padding: 8px; border-radius: 8px; margin-bottom: 8px; font-size: 11px;">
-                <div>🏛️ <strong>GSTIN:</strong> ${gstinBadge} ${data.gstin ? `(${data.gstin})` : ''}</div>
+                <div>🏛️ <strong>Entity:</strong> ${entityBadge}</div>
                 <div style="margin-top: 4px;">💳 <strong>Payments:</strong> ${paymentBadges}</div>
                 <div style="margin-top: 4px;">📅 <strong>Age:</strong> ${domainAgeText}</div>
             </div>

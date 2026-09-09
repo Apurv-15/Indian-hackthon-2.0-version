@@ -26,12 +26,9 @@ class PromptInjectionAgent:
             self.device = torch.device("cuda")
             gpu_name = torch.cuda.get_device_name(0)
             print(f"🚀 CUDA detected! Using GPU: {gpu_name} for Prompt Injection Agent.")
-        elif torch.backends.mps.is_available():
-            self.device = torch.device("mps")
-            print("🚀 Apple Silicon detected! Using MPS for Prompt Injection Agent.")
         else:
             self.device = torch.device("cpu")
-            print("⚠️ CUDA not found for Prompt Injection Agent. Using CPU.")
+            print("🛡️ Running Prompt Injection Agent on CPU.")
 
         # Bypassing the transformer model to avoid Windows CPU deadlocks.
         # We will rely entirely on the rule-based regex patterns.

@@ -1,23 +1,21 @@
+import os
+import sys
+import pickle
+import re
 from transformers import AutoTokenizer, AutoModelForSequenceClassification, AutoModel, pipeline
 import torch
 import torch.nn.functional as F
-import os
-import pickle
-import re
 
 class ContentAnalysisAgent:
     def __init__(self):
-        # Detection of Device
+        # Detection of Device (use CPU on macOS to avoid MTLCompilerService process fork crashes)
         if torch.cuda.is_available():
             self.device = torch.device("cuda")
             gpu_name = torch.cuda.get_device_name(0)
             print(f"🚀 CUDA detected! Using GPU: {gpu_name} for inference optimization.")
-        elif torch.backends.mps.is_available():
-            self.device = torch.device("mps")
-            print("🚀 Apple Silicon detected! Using MPS for inference optimization.")
         else:
             self.device = torch.device("cpu")
-            print("⚠️ CUDA not found. Falling back to CPU.")
+            print("🛡️ Running inference on CPU (Ultra-stable & fast for lightweight models).")
 
         # Load local text ML models...
         model_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'models')
@@ -53,10 +51,13 @@ class ContentAnalysisAgent:
 
         print("Loading Hugging Face pipelines...")
         try:
-            raise Exception("Skipping pipeline to avoid deadlock on Windows")
-            self.sentiment_pipeline = pipeline("text-classification", model="distilbert/distilbert-base-uncased-finetuned-sst-2-english")
-            self.has_pipelines = True
-            print("Successfully loaded HF pipelines.")
+            if sys.platform == "win32" or os.environ.get("SKIP_HF_PIPELINE", "1") == "1":
+                self.has_pipelines = False
+                print("Notice: Skipping HF sentiment pipeline (using lightweight ML classifiers).")
+            else:
+                self.sentiment_pipeline = pipeline("text-classification", model="distilbert/distilbert-base-uncased-finetuned-sst-2-english")
+                self.has_pipelines = True
+                print("Successfully loaded HF pipelines.")
         except Exception as e:
             print(f"Failed to load HF pipelines: {e}")
             self.has_pipelines = False

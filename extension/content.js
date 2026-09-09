@@ -29,7 +29,11 @@ tooltip.style.cssText = `
   max-width: 300px;
   line-height: 1.5;
 `;
-document.body.appendChild(tooltip);
+if (document.body) {
+  document.body.appendChild(tooltip);
+} else {
+  document.addEventListener("DOMContentLoaded", () => document.body.appendChild(tooltip));
+}
 
 // Function to update tooltip content
 function updateTooltip(x, y, data) {
@@ -238,7 +242,16 @@ function injectStoreTrustBadge() {
             const score = Math.round((data.trust_score || 0) * 100);
             let scoreColor = '#4dff4d';
             let shieldIcon = '🛡️';
-            if (data.trust_level === 'NO_SIGNALS' || data.trust_level === 'UNKNOWN') {
+            let badgeTitle = 'AegisAI Store Trust';
+            if (data.trust_level === 'STARTUP_VERIFIED') {
+                scoreColor = '#10b981';
+                shieldIcon = '🚀';
+                badgeTitle = 'AegisAI Verified Startup';
+            } else if (data.trust_level === 'REPLICA_VERIFIED') {
+                scoreColor = '#6366f1';
+                shieldIcon = '📦';
+                badgeTitle = 'AegisAI Replica Verification';
+            } else if (data.trust_level === 'NO_SIGNALS' || data.trust_level === 'UNKNOWN') {
                 scoreColor = '#ff4d4d';
                 shieldIcon = '🚨';
             } else if (data.trust_level === 'FEW_SIGNALS' || data.trust_level === 'SOME_SIGNALS') {
@@ -254,7 +267,7 @@ function injectStoreTrustBadge() {
                 .replace(/'/g, '&#39;');
 
             const buildReviewSection = (reviewSummary) => {
-                if (!reviewSummary?.has_meaningful_results) {
+                if (!reviewSummary || (!reviewSummary.summary && (!reviewSummary.sources || reviewSummary.sources.length === 0))) {
                     return '';
                 }
 
@@ -325,8 +338,8 @@ function injectStoreTrustBadge() {
 
                     <div class="aegis-card-section-title">Business Verification</div>
                     <div class="aegis-metric-pill">
-                        <span style="color: #374151; font-weight: 600;">GSTIN Status</span>
-                        <strong style="color: #111827; font-weight: 700;">${data.gstin_valid ? 'Valid Checksum' : (data.gstin ? 'Invalid Format' : 'Not Found')}</strong>
+                        <span style="color: #374151; font-weight: 600;">Business Entity</span>
+                        <strong style="color: #111827; font-weight: 700; text-align: right; max-width: 185px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" title="${escapeHtml(data.business_entity || (data.gstin_valid ? 'GSTIN Verified' : 'Standard Store'))}">${escapeHtml(data.business_entity || (data.gstin_valid ? 'GSTIN Verified' : 'Standard Store'))}</strong>
                     </div>
 
                     <div class="aegis-metric-pill">
@@ -338,6 +351,33 @@ function injectStoreTrustBadge() {
                         <span style="color: #374151; font-weight: 600;">Domain Age</span>
                         <strong style="color: #111827; font-weight: 700;">${data.domain_age?.age_text || 'Active'}</strong>
                     </div>
+
+                    ${data.score_breakdown ? `
+                        <div class="aegis-card-section-title" style="margin-top: 10px;">Trust Factors Breakdown</div>
+                        <div style="font-size: 11px; background: #f5eedf; border: 1px solid #ded1bf; padding: 10px 12px; border-radius: 10px; margin-bottom: 10px;">
+                            <div style="display: flex; justify-content: space-between; margin-bottom: 4px;">
+                                <span>Domain Age & Registry</span>
+                                <strong>${data.score_breakdown.domain_age}%</strong>
+                            </div>
+                            <div style="background: #e2d5c3; height: 5px; border-radius: 3px; overflow: hidden; margin-bottom: 8px;">
+                                <div style="background: ${scoreColor}; height: 100%; width: ${data.score_breakdown.domain_age}%;"></div>
+                            </div>
+                            <div style="display: flex; justify-content: space-between; margin-bottom: 4px;">
+                                <span>Payment Security</span>
+                                <strong>${data.score_breakdown.gateways}%</strong>
+                            </div>
+                            <div style="background: #e2d5c3; height: 5px; border-radius: 3px; overflow: hidden; margin-bottom: 8px;">
+                                <div style="background: ${scoreColor}; height: 100%; width: ${data.score_breakdown.gateways}%;"></div>
+                            </div>
+                            <div style="display: flex; justify-content: space-between; margin-bottom: 4px;">
+                                <span>External Reviews Sentiment</span>
+                                <strong>${data.score_breakdown.review_factor}%</strong>
+                            </div>
+                            <div style="background: #e2d5c3; height: 5px; border-radius: 3px; overflow: hidden;">
+                                <div style="background: ${scoreColor}; height: 100%; width: ${data.score_breakdown.review_factor}%;"></div>
+                            </div>
+                        </div>
+                    ` : ''}
 
                     ${reviewSectionHtml}
                 </div>

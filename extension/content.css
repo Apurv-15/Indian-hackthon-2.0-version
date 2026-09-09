@@ -57,7 +57,9 @@
     position: absolute;
     bottom: 52px;
     right: 0;
-    width: 335px;
+    width: 345px;
+    max-height: calc(85vh - 80px);
+    overflow-y: auto;
     background: #fbf9f5;
     color: #111827;
     border: 1.5px solid #d6cbbe;
@@ -68,6 +70,25 @@
     font-size: 12.5px;
     line-height: 1.5;
     animation: aegisFadeIn 0.2s ease-out;
+    box-sizing: border-box;
+}
+
+.aegis-trust-card::-webkit-scrollbar {
+    width: 6px;
+}
+
+.aegis-trust-card::-webkit-scrollbar-track {
+    background: #f2ece1;
+    border-radius: 10px;
+}
+
+.aegis-trust-card::-webkit-scrollbar-thumb {
+    background: #c9bca9;
+    border-radius: 10px;
+}
+
+.aegis-trust-card::-webkit-scrollbar-thumb:hover {
+    background: #a89882;
 }
 
 .aegis-card-header {

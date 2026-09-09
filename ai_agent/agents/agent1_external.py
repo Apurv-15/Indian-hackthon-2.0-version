@@ -242,10 +242,18 @@ class ExternalAnalysisAgent:
             return True
         return False
 
-    def analyze_url_risk(self, url):
+    def analyze_url_risk(self, url, page_url=""):
         """Analyze URL for suspicious patterns"""
         risk_score = 0.0
         reasons = []
+        domain = self.extract_domain(url).lower()
+
+        # Check Same-Domain Internal Link Navigation (e.g. bossgadgets.in/pages/track-your-order on bossgadgets.in)
+        is_same_domain = False
+        if page_url:
+            page_domain = self.extract_domain(page_url).lower()
+            if page_domain and domain and (page_domain == domain or domain.endswith('.' + page_domain) or page_domain.endswith('.' + domain)):
+                is_same_domain = True
 
         # Real Threat Intelligence Check (PhishTank database)
         if self.check_phishtank(url):
@@ -371,10 +379,12 @@ class ExternalAnalysisAgent:
         # Combine predictions by taking the maximum probability of maliciousness
         combined_ml_prob = max(url_ml_prob, url_uci_prob)
 
-        # If domain is officially legitimate and no homoglyphs, dampen ML false positives
-        if is_already_official:
+        # If domain is officially legitimate, or is an internal navigation link on the current domain, dampen ML false positives
+        if is_already_official or is_same_domain:
             risk_score = min(risk_score, 0.15)
             combined_ml_prob = min(combined_ml_prob, 0.15)
+            if is_same_domain:
+                reasons.append(f"Internal navigation link on current domain ({domain})")
         else:
             # Hybrid Logic: Weight the ML models heavily if they have high confidence
             if combined_ml_prob > 0.8:
@@ -473,8 +483,9 @@ class ExternalAnalysisAgent:
         if urls:
             url_risks = []
             url_ml_risks = []
+            page_url = input_data.get('page_url', '')
             for url in urls:
-                risk, reasons, ml_prob = self.analyze_url_risk(url)
+                risk, reasons, ml_prob = self.analyze_url_risk(url, page_url=page_url)
                 url_risks.append(risk)
                 url_ml_risks.append(ml_prob)
                 results['risk_factors'].extend(reasons)

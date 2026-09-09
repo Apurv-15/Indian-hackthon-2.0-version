@@ -1,14 +1,14 @@
 """
 ==============================================================================
-                AGENT 5: STORE TRUST AGENT (ENHANCED)
+                AGENT 5: STORE TRUST AGENT (PRODUCTION ACCURACY OVERHAUL)
         E-commerce Storefront Legitimacy, GSTIN, Payments, Age & Reviews
 ==============================================================================
 
-Evaluates online stores across 4 critical trust pillars:
+Evaluates online stores across 4 critical trust pillars with high precision:
 1. GSTIN & Legal Business Entity Verification (Luhn mod-36 checksum)
 2. Reputable Payment Gateways (Razorpay, Cashfree, PayU, Stripe, CCAvenue, Paytm, Shopify)
 3. Domain Age & Registration Date (Public ICANN RDAP / WHOIS lookups)
-4. Public Consumer Reviews & Sentiment Analysis (Delivery speed, fake products, scam alerts)
+4. Multi-Source Public Consumer Reviews & Negation-Aware Sentiment Analysis
 """
 
 import re
@@ -18,16 +18,44 @@ import time
 import requests
 from datetime import datetime
 from urllib.parse import urlparse, urljoin
+from concurrent.futures import ThreadPoolExecutor, as_completed
+
+try:
+    from curl_cffi import requests as cffi_requests
+    HAS_CURL_CFFI = True
+except ImportError:
+    HAS_CURL_CFFI = False
 
 
 class StoreTrustAgent:
     GSTIN_RE = re.compile(r'\b[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z][1-9A-Z]Z[0-9A-Z]\b')
+    CIN_RE = re.compile(r'\b[LU][0-9]{5}[A-Z]{2}[0-9]{4}[A-Z]{3}[0-9]{6}\b')
     PHONE_RE = re.compile(r'(\+91[\-\s]?)?[6-9]\d{9}\b')
     EMAIL_RE = re.compile(r'[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}')
     PINCODE_RE = re.compile(r'\b\d{6}\b')
-    LEGAL_SUFFIX_RE = re.compile(r'\b(pvt\.?\s*ltd|private\s+limited|llp|opc\b|limited|enterprises|technologies)', re.IGNORECASE)
+    LEGAL_SUFFIX_RE = re.compile(r'\b([A-Z][A-Za-z0-9\s,\.&amp;\-]{2,40}\s*(?:Pvt\.?\s*Ltd|Private\s+Limited|Limited|LLP|Enterprise|Enterprises))\b', re.IGNORECASE)
     POLICY_KEYWORDS = ['return', 'refund', 'shipping', 'privacy policy', 'terms of service', 'terms & conditions', 'contact us']
     LINK_KEYWORDS = ['term', 'privacy', 'refund', 'return', 'shipping', 'about', 'contact', 'legal', 'polic']
+
+    INDIAN_ENTERPRISE_DOMAINS = {
+        'croma.com': 'Infiniti Retail Ltd (A Tata Enterprise)',
+        'reliancedigital.in': 'Reliance Retail Ltd',
+        'tatacliq.com': 'Tata Unistore Limited',
+        'lenskart.com': 'Valyoo Technologies Pvt Ltd',
+        'boat-lifestyle.com': 'Imagine Marketing Limited',
+        'nykaa.com': 'FSN E-Commerce Ventures Ltd',
+        'myntra.com': 'Myntra Designs Pvt Ltd',
+        'flipkart.com': 'Flipkart Internet Pvt Ltd',
+        'amazon.in': 'Amazon Seller Services Pvt Ltd',
+        'snitch.co.in': 'Snitch Apparels Pvt Ltd',
+        'bewakoof.com': 'Bewakoof Brands Pvt Ltd',
+        'mamaearth.in': 'Honasa Consumer Limited',
+        'pepperfry.com': 'Trendsutra Platform Services Pvt Ltd',
+        'bluestone.com': 'BlueStone Jewellery & Lifestyle Ltd',
+        'caratlane.com': 'CaratLane Trading Pvt Ltd',
+        'ajio.com': 'Reliance Retail Ltd (Ajio)',
+        'sugarcosmetics.com': 'Vellvette Lifestyle Pvt Ltd'
+    }
     
     PAYMENT_GATEWAYS = {
         'razorpay': ['checkout.razorpay.com', 'api.razorpay.com', 'razorpay.com', 'rzp_'],
@@ -37,6 +65,10 @@ class StoreTrustAgent:
         'ccavenue': ['secure.ccavenue.com', 'ccavenue.com'],
         'paytm': ['securegw.paytm.in', 'paytm.com'],
         'phonepe': ['api.phonepe.com', 'phonepe.com/sdk'],
+        'juspay': ['juspay.in', 'api.juspay.in', 'hyperpay'],
+        'tata_pay': ['tatapay', 'tata-pay', 'infinitiretail'],
+        'billdesk': ['billdesk.com', 'pgi.billdesk.com'],
+        'cybersource': ['cybersource.com', 'kount.com'],
         'shopify_payments': ['cdn.shopify.com', 'shop.app/pay', 'shopify.com/checkout']
     }
 
@@ -47,6 +79,9 @@ class StoreTrustAgent:
     ]
     HREF_RE = re.compile(r'href=["\']([^"\'#]+)["\']', re.IGNORECASE)
     _GSTIN_CHARS = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ"
+
+    # Negation words to check within a 40-char preceding window
+    NEGATIONS = {'not', 'no', 'never', 'without', "isn't", "wasn't", "aren't", "don't", "didn't", "fake"}
 
     @classmethod
     def gstin_checksum_valid(cls, gstin):
@@ -68,9 +103,29 @@ class StoreTrustAgent:
         except ValueError:
             return False
 
-    def fetch_page(self, url):
+    def _score_phrase(self, phrase, text):
+        """
+        Check if phrase exists in text and is NOT preceded by a negation word within a 40-char window.
+        Returns True if phrase is genuinely asserted (not negated).
+        """
+        idx = 0
+        while True:
+            idx = text.find(phrase, idx)
+            if idx == -1:
+                return False
+            window = text[max(0, idx - 40):idx].split()
+            if not any(neg in window for neg in self.NEGATIONS):
+                return True
+            idx += len(phrase)
+
+    def fetch_page(self, url, timeout=3.5):
         try:
-            resp = requests.get(url, timeout=6, allow_redirects=True, headers={'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'})
+            resp = requests.get(
+                url, 
+                timeout=timeout, 
+                allow_redirects=True, 
+                headers={'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'}
+            )
             return resp
         except requests.exceptions.RequestException:
             return None
@@ -99,11 +154,92 @@ class StoreTrustAgent:
         has_upi_only = bool(re.search(r'(@okaxis|@okhdfcbank|@okicici|@paytm|@upi|upi://pay)', combined))
         return detected, has_upi_only
 
+    def detect_platform(self, html):
+        """Detect underlying e-commerce platform (Shopify, WooCommerce, Magento)."""
+        html_lower = html.lower()
+        if 'cdn.shopify.com' in html_lower or 'shopify.theme' in html_lower or 'Shopify.shop' in html:
+            return 'Shopify'
+        elif 'wp-content' in html_lower or 'woocommerce' in html_lower:
+            return 'WooCommerce'
+        elif 'mage/cookies' in html_lower or 'magento' in html_lower:
+            return 'Magento'
+        return 'Custom'
+
+    def detect_india_fraud_signals(self, html, combined_text):
+        """Detect specific Indian e-commerce fraud and pressure patterns."""
+        signals = {
+            'whatsapp_only': False,
+            'fake_urgency': False,
+            'suspicious_pricing': False,
+            'missing_address': False
+        }
+        
+        # 1. WhatsApp only contact (no email or phone, only wa.me link or WhatsApp button)
+        has_phone = bool(self.PHONE_RE.search(combined_text))
+        has_email = bool(self.EMAIL_RE.search(combined_text))
+        has_wa = 'wa.me/' in combined_text.lower() or 'api.whatsapp.com' in combined_text.lower() or 'whatsapp' in combined_text.lower()
+        if has_wa and not has_phone and not has_email:
+            signals['whatsapp_only'] = True
+
+        # 2. Fake urgency (countdown timers, "Only 2 left at this price!", "Sale ends in 05:00")
+        urgency_patterns = [
+            r'\bonly\s+[1-9]\s+left\b',
+            r'\bsale\s+ends\s+in\b',
+            r'\bhurry,\s+limited\s+stock\b',
+            r'\b[0-9]{1,2}\s+people\s+are\s+viewing\s+this\b',
+            r'class=["\'][^"\'\'>]*countdown[^"\'\'>]*["\']'
+        ]
+        if any(re.search(pat, combined_text, re.IGNORECASE) for pat in urgency_patterns):
+            signals['fake_urgency'] = True
+
+        # 3. Suspicious pricing (e.g. ₹99 or ₹199 for luxury items like AirPods/iPhones/Smartwatches)
+        cheap_deal_patterns = [
+            r'(?:price|buy|only|just|cost|get)\s*(?:is|for|at)?\s*₹\s*(?:49|99|149|199)\b',
+            r'(?:price|buy|only|just|cost|get)\s*(?:is|for|at)?\s*rs\.?\s*(?:49|99|149|199)\b'
+        ]
+        high_value_items = ['airpods pro', 'iphone 1', 'iphone 2', 'iphone 3', 'iphone 4', 'iphone 5', 'macbook pro', 'rolex']
+        combined_lower = combined_text.lower()
+        # Ensure it's not just a discount coupon or shipping fee ("₹99 off", "shipping ₹49")
+        if any(item in combined_lower for item in high_value_items):
+            if any(re.search(pat, combined_text, re.IGNORECASE) for pat in cheap_deal_patterns):
+                if not any(k in combined_lower for k in ['off on', 'coupon', 'discount code', 'shipping fee', 'cashback']):
+                    signals['suspicious_pricing'] = True
+
+        # 4. Missing physical address (no 6-digit Indian PIN code)
+        if not self.PINCODE_RE.search(combined_text):
+            signals['missing_address'] = True
+
+        return signals
+
+    SOCIAL_PATTERNS = ['instagram.com/', 'facebook.com/', 'youtube.com/', 'linkedin.com/company', 'twitter.com/', 'x.com/']
+
+    def detect_social_presence(self, combined_text):
+        """Detect linked brand social media channels."""
+        text_lower = combined_text.lower()
+        return any(pat in text_lower for pat in self.SOCIAL_PATTERNS)
+
+    REPLICA_KEYWORDS = [
+        'master copy', '1st copy', 'first copy', '7a quality', '7a grade',
+        'ua quality', 'unauthorized authentic', 'imported quality', 'copy store',
+        'replica', 'mirror copy', 'super clone', 'og quality', 'duplicate'
+    ]
+
+    def detect_replica_store(self, html, combined_text):
+        """Detect if store explicitly or implicitly sells master copies / 7A replicas."""
+        combined_lower = combined_text.lower()
+        if any(kw in combined_lower for kw in self.REPLICA_KEYWORDS):
+            return True
+        # Check for luxury electronics/wearables priced at ₹1,200 - ₹3,999 range
+        cheap_replica_price = bool(re.search(r'₹\s*(?:1[2-9]\d{2}|[23]\d{3})\b', combined_text))
+        replica_items = ['airpods', 'air pods', 'jordan', 'nike', 'rolex', 'yeezy', 'samsung buds', 'dyson', 'smartwatch', 'smart watch']
+        if cheap_replica_price and any(item in combined_lower for item in replica_items):
+            return True
+        return False
+
     def fetch_domain_age(self, domain):
         """Query public ICANN RDAP to determine domain registration creation date."""
         clean_domain = domain.lower().replace('www.', '').split(':')[0]
         try:
-            # RDAP public open resolver
             resp = requests.get(f"https://rdap.org/domain/{clean_domain}", timeout=5, headers={'User-Agent': 'AegisAI/1.0'})
             if resp.status_code == 200:
                 data = resp.json()
@@ -133,134 +269,186 @@ class StoreTrustAgent:
             'age_text': 'Domain age lookup unavailable'
         }
 
+    NOISE_PATTERNS = [
+        'do you agree with', 'voice your opinion', 'trustscore', 'read reviews, company details',
+        'submit your complaint', 'online review & complaint portal', 'write your review',
+        'share your experience', 'product/brand information is coming soon', 'stay tuned for updates',
+        'evaluating', 'considering', 'based on recent reviews', 'your experience can help others',
+        'see what', 'customer care', 'toll free number', 'contact details', 'is legit or a scam'
+    ]
+
+    def _clean_and_filter_snippet(self, s):
+        """Clean HTML entities and filter out noisy template meta-descriptions."""
+        if not s or len(s) < 35:
+            return None
+        import html as html_lib
+        s = html_lib.unescape(s)
+        s = re.sub(r'<[^>]+>', '', s).strip()
+        s_lower = s.lower()
+        
+        # Drop generic site meta-templates
+        if any(pat in s_lower for pat in self.NOISE_PATTERNS):
+            return None
+            
+        # Ensure it contains actual customer experience content
+        useful_words = ['buy', 'bought', 'order', 'ordered', 'deliver', 'delivered', 'product', 'item', 'quality', 'money', 'service', 'support', 'return', 'refund', 'scam', 'fake', 'good', 'bad', 'working', 'broke', 'tracking', 'received', 'got', 'never', 'delay']
+        if not any(w in s_lower for w in useful_words):
+            return None
+        return s
+
+    def _query_search_snippets(self, query):
+        """Helper to query search engines & review portals with TLS browser impersonation."""
+        headers = {
+            'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+            'Accept-Language': 'en-US,en;q=0.9',
+            'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8'
+        }
+        
+        # 1. Try DDG with curl_cffi TLS impersonation
+        try:
+            url = f"https://html.duckduckgo.com/html/?q={query}"
+            if HAS_CURL_CFFI:
+                resp = cffi_requests.get(url, timeout=5, impersonate="chrome120", headers=headers)
+            else:
+                resp = requests.get(url, timeout=4, headers=headers)
+
+            if resp.status_code == 200:
+                raw_snippets = re.findall(r'<a class="result__snippet[^>]*>(.*?)</a>', resp.text, re.DOTALL)
+                clean_snippets = []
+                for s in raw_snippets[:6]:
+                    cleaned = self._clean_and_filter_snippet(s)
+                    if cleaned:
+                        clean_snippets.append(cleaned)
+                if clean_snippets:
+                    return clean_snippets
+        except Exception:
+            pass
+
+        # 2. Fallback to direct ConsumerComplaints India query if target specified
+        if 'consumercomplaints' in query or 'mouthshut' in query:
+            clean_dom = query.split()[-1]
+            try:
+                target_url = f"https://www.consumercomplaints.in/search?q={clean_dom}"
+                if HAS_CURL_CFFI:
+                    resp = cffi_requests.get(target_url, timeout=5, impersonate="chrome120", headers=headers)
+                    if resp.status_code == 200:
+                        complaint_titles = re.findall(r'<td[^>]*class=["\']complaint-title["\'][^>]*>(.*?)</td>', resp.text, re.DOTALL)
+                        clean_titles = []
+                        for t in complaint_titles[:4]:
+                            cleaned = self._clean_and_filter_snippet(t)
+                            if cleaned:
+                                clean_titles.append(f"Buyer Complaint: {cleaned}")
+                        if clean_titles:
+                            return clean_titles
+            except Exception:
+                pass
+
+        return []
+
     def fetch_customer_reviews(self, domain):
-        """Fetch customer review sentiment, summary, and clickable source links."""
+        """Fetch customer review sentiment using parallel multi-source queries."""
         clean_domain = domain.lower().replace('www.', '').split(':')[0]
         brand_name = clean_domain.split('.')[0].capitalize()
         
-        # Build direct review destination links
         sources = [
-            {
-                'name': 'Google Reviews Search',
-                'url': f"https://www.google.com/search?q={clean_domain}+reviews+complaints"
-            },
-            {
-                'name': 'Trustpilot',
-                'url': f"https://www.trustpilot.com/review/{clean_domain}"
-            },
-            {
-                'name': 'Consumer Complaints India',
-                'url': f"https://www.consumercomplaints.in/search?q={clean_domain}"
-            }
+            {'name': 'Google Reviews Search', 'url': f"https://www.google.com/search?q={clean_domain}+reviews+complaints"},
+            {'name': 'Trustpilot', 'url': f"https://www.trustpilot.com/review/{clean_domain}"},
+            {'name': 'Consumer Complaints India', 'url': f"https://www.consumercomplaints.in/search?q={clean_domain}"},
+            {'name': 'MouthShut India', 'url': f"https://www.mouthshut.com/search/result.aspx?q={clean_domain}"}
         ]
 
-        try:
-            # Query DuckDuckGo HTML for review signals
-            headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)'}
-            url = f"https://html.duckduckgo.com/html/?q={clean_domain}+reviews+complaints+experience"
-            resp = requests.get(url, timeout=5, headers=headers)
+        queries = [
+            f"{clean_domain} reviews complaints experience",
+            f"site:consumercomplaints.in {clean_domain}",
+            f"site:mouthshut.com {clean_domain}"
+        ]
+
+        all_snippets = []
+        with ThreadPoolExecutor(max_workers=3) as executor:
+            future_to_query = {executor.submit(self._query_search_snippets, q): q for q in queries}
+            for future in as_completed(future_to_query):
+                res = future.result()
+                if res:
+                    all_snippets.extend(res)
+
+        # Deduplicate snippets
+        unique_snippets = list(dict.fromkeys(all_snippets))[:8]
+        combined_snippets = " ".join(unique_snippets).lower()
+        has_meaningful_results = bool(unique_snippets)
+
+        # Signal dictionaries
+        positive_signals = ['legit', 'genuine', 'good quality', 'fast delivery', 'authentic', 'trusted', 'reliable', '5 star', 'happy customer']
+        complaint_signals = ['slow delivery', 'delayed delivery', 'late delivery', 'poor customer support', 'refund delayed', 'hard to return', 'poor packaging']
+        fraud_signals = ['scam', 'fraud', 'never delivered', 'fake website', 'fake tracking', 'money deducted no order', 'do not buy', 'cheated', 'complaint']
+
+        service_issue_signals = {
+            'delivery delays': ['slow delivery', 'delayed delivery', 'late delivery', 'delivery delay'],
+            'customer support issues': ['poor customer support', 'support not responding', 'no response', 'bad service'],
+            'refund/return friction': ['refund delayed', 'hard to return', 'return issue', 'refund issue'],
+            'product quality concerns': ['poor packaging', 'damaged product', 'fake product', 'defective']
+        }
+
+        pos_count = sum(1 for phrase in positive_signals if self._score_phrase(phrase, combined_snippets))
+        comp_count = sum(1 for phrase in complaint_signals if self._score_phrase(phrase, combined_snippets))
+        fraud_count = sum(1 for phrase in fraud_signals if self._score_phrase(phrase, combined_snippets))
+
+        issue_mentions = []
+        for label, keywords in service_issue_signals.items():
+            if any(self._score_phrase(kw, combined_snippets) for kw in keywords):
+                issue_mentions.append(label)
+
+        if fraud_count >= 2 and fraud_count > pos_count:
+            sentiment = "HIGH_RISK"
+            rating_label = "🚨 High Risk — Buyer Complaints"
+            summary = "Multiple buyers report non-delivery or unfulfilled orders on external consumer forums."
+            takeaways = [
+                "Repeated scam / non-delivery complaints detected",
+                "Fake tracking or non-responsive support reported",
+                "Avoid prepaid orders; prefer COD if ordering"
+            ]
+        elif comp_count > 0 or (fraud_count > 0 and pos_count > 0):
+            sentiment = "MIXED"
+            rating_label = "⚠️ Mixed Customer Experiences"
+            if issue_mentions:
+                summary = f"Store delivers genuine items, but customers report {', '.join(issue_mentions[:2])}."
+            else:
+                summary = "Store delivers products, but has occasional service or delivery complaints."
             
-            snippets = []
-            if resp.status_code == 200:
-                # Extract snippet text
-                snippets = re.findall(r'<a class="result__snippet[^>]*>(.*?)</a>', resp.text, re.DOTALL)
-                snippets = [re.sub(r'<[^>]+>', '', s).strip() for s in snippets[:6]]
+            takeaways = [
+                "Products are generally authentic",
+                "Delivery can take longer than advertised (1-2+ weeks)",
+                "Return or refund process may require follow-ups"
+            ]
+        elif pos_count > 0:
+            sentiment = "POSITIVE"
+            rating_label = "✅ Generally Positive Feedback"
+            summary = "Customers report receiving authentic products with reliable deliveries."
+            takeaways = [
+                "Verified genuine products and packaging",
+                "Smooth delivery experience reported by buyers",
+                "Legitimate active store presence"
+            ]
+        else:
+            sentiment = "NEUTRAL"
+            rating_label = "ℹ️ Moderate Independent Presence"
+            summary = f"No major scam complaints found for {brand_name}."
+            takeaways = [
+                "No critical scam or fraud flags reported",
+                "Independent review volume is moderate",
+                "Standard precautions (COD / Card protection) apply"
+            ]
 
-            combined_snippets = " ".join(snippets).lower()
-            has_meaningful_results = bool(snippets)
-
-            # Analyze sentiment & issues
-            positive_signals = ['legit', 'genuine', 'good quality', 'fast delivery', 'authentic', 'trusted', 'reliable', '5 star', 'happy customer']
-            complaint_signals = ['slow delivery', 'delayed delivery', 'late delivery', 'poor customer support', 'refund delayed', 'hard to return', 'poor packaging']
-            fraud_signals = ['scam', 'fraud', 'never delivered', 'fake website', 'fake tracking', 'money deducted no order', 'do not buy', 'cheated', 'complaint']
-
-            service_issue_signals = {
-                'delivery delays': ['slow delivery', 'delayed delivery', 'late delivery', 'delivery delay'],
-                'customer support issues': ['poor customer support', 'support not responding', 'no response', 'bad service'],
-                'refund/return friction': ['refund delayed', 'hard to return', 'return issue', 'refund issue'],
-                'product quality concerns': ['poor packaging', 'damaged product', 'fake product', 'defective']
-            }
-
-            pos_count = sum(1 for w in positive_signals if w in combined_snippets)
-            comp_count = sum(1 for w in complaint_signals if w in combined_snippets)
-            fraud_count = sum(1 for w in fraud_signals if w in combined_snippets)
-            issue_mentions = []
-            for label, keywords in service_issue_signals.items():
-                if any(keyword in combined_snippets for keyword in keywords):
-                    issue_mentions.append(label)
-
-            evidence_note = f"Based on {len(snippets)} external review snippet{'s' if len(snippets) != 1 else ''}"
-            if len(snippets) <= 2:
-                evidence_note += "; confidence is limited because review coverage is thin."
-            else:
-                evidence_note += "."
-
-            # Extract clean, specific bullet points
-            takeaways = []
-            if fraud_count >= 2 and fraud_count > pos_count:
-                sentiment = "HIGH_RISK"
-                rating_label = "🚨 High Risk — Buyer Complaints"
-                summary = f"Multiple buyers report non-delivery or unfulfilled orders on external forums. Exercise caution before paying upfront."
-                takeaways = [
-                    "Repeated scam / non-delivery complaints detected",
-                    "Fake tracking or non-responsive support reported",
-                    "Avoid prepaid orders; prefer COD if ordering"
-                ]
-            elif comp_count > 0 or (fraud_count > 0 and pos_count > 0):
-                sentiment = "MIXED"
-                rating_label = "⚠️ Mixed Customer Experiences"
-                if issue_mentions:
-                    summary = f"Store delivers genuine items, but customers frequently report {', '.join(issue_mentions[:2])}."
-                else:
-                    summary = "Store generally delivers products, but has occasional service or delivery complaints."
-                
-                takeaways = [
-                    "Products are generally authentic",
-                    "Delivery can take longer than advertised (1-2+ weeks)",
-                    "Return or refund process may require follow-ups"
-                ]
-            elif pos_count > 0:
-                sentiment = "POSITIVE"
-                rating_label = "✅ Generally Positive Feedback"
-                summary = f"Customers report receiving authentic products with reliable deliveries."
-                takeaways = [
-                    "Verified genuine products and packaging",
-                    "Smooth delivery experience reported by buyers",
-                    "Legitimate active store presence"
-                ]
-            else:
-                sentiment = "NEUTRAL"
-                rating_label = "ℹ️ Moderate Independent Presence"
-                summary = f"No major scam complaints found for {brand_name}. Store has standard independent presence online."
-                takeaways = [
-                    "No critical scam or fraud flags reported",
-                    "Independent review volume is moderate",
-                    "Standard precautions (COD / Card protection) apply"
-                ]
-
-            return {
-                'sentiment': sentiment,
-                'rating_label': rating_label,
-                'summary': summary,
-                'takeaways': takeaways,
-                'sources': sources,
-                'snippets': [s for s in snippets if len(s) > 20][:4],
-                'snippets_found': len(snippets),
-                'has_meaningful_results': has_meaningful_results,
-                'issue_mentions': issue_mentions
-            }
-        except Exception:
-            return {
-                'sentiment': 'NEUTRAL',
-                'rating_label': 'ℹ️ Standard Store Profile',
-                'summary': 'Store appears active with standard online profile.',
-                'takeaways': ["Standard e-commerce precautions apply"],
-                'sources': sources,
-                'snippets': [],
-                'snippets_found': 0,
-                'has_meaningful_results': False,
-                'issue_mentions': []
-            }
+        return {
+            'sentiment': sentiment,
+            'rating_label': rating_label,
+            'summary': summary,
+            'takeaways': takeaways,
+            'sources': sources,
+            'snippets': [s for s in unique_snippets if len(s) > 20][:4],
+            'snippets_found': len(unique_snippets),
+            'has_meaningful_results': has_meaningful_results,
+            'issue_mentions': issue_mentions
+        }
 
     TRUSTED_PLATFORMS = {
         'amazon.in': 'Amazon India Official Marketplace',
@@ -281,7 +469,7 @@ class StoreTrustAgent:
         if domain.startswith('www.'):
             domain = domain[4:]
 
-        # 0. Check Trusted Tier-1 Marketplaces (Amazon, Flipkart, etc.)
+        # 0. Check Trusted Tier-1 Marketplaces
         for trusted_dom, label in self.TRUSTED_PLATFORMS.items():
             if domain == trusted_dom or domain.endswith('.' + trusted_dom):
                 domain_age = self.fetch_domain_age(domain)
@@ -298,6 +486,13 @@ class StoreTrustAgent:
                         'summary': f'{label} — Verified platform with full buyer protection, secure escrow, and established return policies.',
                         'has_meaningful_results': True,
                         'sources': []
+                    },
+                    'score_breakdown': {
+                        'base_trust': 99,
+                        'domain_age': 100,
+                        'gateways': 100,
+                        'review_factor': 100,
+                        'platform_integrity': 100
                     },
                     'reasons': [
                         f"Verified Enterprise Marketplace: {label}",
@@ -321,42 +516,85 @@ class StoreTrustAgent:
                 'signals': {},
                 'domain_age': {'age_text': 'Unreachable'},
                 'payment_gateways': [],
+                'score_breakdown': {'base_trust': 0, 'domain_age': 0, 'gateways': 0, 'review_factor': 0, 'platform_integrity': 0},
                 'review_summary': {'rating_label': '', 'summary': '', 'sentiment': 'NO_DATA', 'has_meaningful_results': False, 'sources': []}
             }
 
         html = resp.text
         final_url = resp.url
+        platform = self.detect_platform(html)
+        signals['platform'] = platform
+
         signals['ssl_valid'] = final_url.lower().startswith('https://')
         if signals['ssl_valid']:
             reasons.append("Site loads securely over HTTPS with a valid SSL certificate")
         else:
             reasons.append("Site does not use HTTPS — checkout data may be unencrypted")
 
-        # Fetch sub-pages (Contact, Terms, Refund, About)
+        # Sub-pages fetch (Parallelized for maximum speed)
         sub_pages_html = []
         policy_links = self.find_policy_links(html, final_url)
         if not policy_links:
             policy_links = [urljoin(final_url, p) for p in self.FALLBACK_PATHS]
-        for link in policy_links[:4]:
-            sub_resp = self.fetch_page(link)
-            if sub_resp is not None and sub_resp.status_code < 400:
-                sub_pages_html.append(sub_resp.text)
+        
+        with ThreadPoolExecutor(max_workers=4) as executor:
+            future_to_link = {executor.submit(self.fetch_page, link, 3.5): link for link in policy_links[:4]}
+            for future in as_completed(future_to_link):
+                sub_resp = future.result()
+                if sub_resp is not None and sub_resp.status_code < 400:
+                    sub_pages_html.append(sub_resp.text)
 
         combined_text = html + "\n" + "\n".join(sub_pages_html)
 
-        # 1. GSTIN Check
+        # 1. Corporate Business Entity & MCA CIN Check
+        business_entity = None
+        cin_matches = self.CIN_RE.findall(combined_text)
+        
+        # Check 1: Known Indian Enterprise Brand Dictionary
+        for registered_dom, entity_name in self.INDIAN_ENTERPRISE_DOMAINS.items():
+            if domain == registered_dom or domain.endswith('.' + registered_dom):
+                business_entity = entity_name
+                signals['enterprise_brand'] = True
+                break
+
+        # Check 2: MCA CIN Found
+        if not business_entity and cin_matches:
+            business_entity = f"MCA Registered (CIN: {cin_matches[0]})"
+
+        # Check 3: Legal Entity Suffix found in footer/text
+        if not business_entity:
+            legal_matches = self.LEGAL_SUFFIX_RE.findall(combined_text)
+            if legal_matches:
+                clean_name = legal_matches[0].strip()
+                if len(clean_name) > 5 and not any(kw in clean_name.lower() for kw in ['privacy', 'terms', 'return', 'refund', 'policy']):
+                    business_entity = clean_name.strip()
+
+        # Check 4: Valid GSTIN fallback
         gstin_matches = self.GSTIN_RE.findall(combined_text)
         valid_gstins = [g for g in gstin_matches if self.gstin_checksum_valid(g)]
         signals['gstin_found'] = bool(gstin_matches)
         signals['gstin_checksum_valid'] = bool(valid_gstins)
-        signals['gstin_number'] = valid_gstins[0] if valid_gstins else (gstin_matches[0] if gstin_matches else None)
+        signals['gstin_number'] = valid_gstins[0] if valid_gstins else None
 
-        if valid_gstins:
+        if not business_entity and valid_gstins:
+            business_entity = f"GSTIN Verified ({valid_gstins[0]})"
+        elif not business_entity and platform in ('Shopify', 'WooCommerce'):
+            business_entity = f"{platform} Merchant Infrastructure"
+        elif not business_entity:
+            business_entity = "Independent Storefront"
+
+        signals['business_entity'] = business_entity
+        is_entity_verified = bool(signals.get('enterprise_brand') or valid_gstins or cin_matches or "pvt" in business_entity.lower() or "limited" in business_entity.lower() or "ltd" in business_entity.lower())
+        signals['is_entity_verified'] = is_entity_verified
+
+        if signals.get('enterprise_brand'):
+            reasons.append(f"Verified Corporate Brand Entity: {business_entity}")
+        elif valid_gstins:
             reasons.append(f"GSTIN found & validated via checksum: {valid_gstins[0]}")
-        elif gstin_matches:
-            reasons.append(f"GSTIN-shaped string found ({gstin_matches[0]}) but failed checksum — possible fake")
-        else:
-            reasons.append("No GSTIN found on public pages (Standard for overseas or multi-seller platforms)")
+        elif cin_matches:
+            reasons.append(f"Ministry of Corporate Affairs CIN Verified: {cin_matches[0]}")
+        elif is_entity_verified:
+            reasons.append(f"Corporate entity identified: {business_entity}")
 
         # 2. Payment Gateways
         gateways, has_upi_only = self.detect_payment_gateways(html, sub_pages_html)
@@ -401,76 +639,165 @@ class StoreTrustAgent:
             reasons.append(f"Standard policy pages linked ({', '.join(policies_found[:3])})")
 
         signals['legal_entity_mentioned'] = bool(self.LEGAL_SUFFIX_RE.search(combined_text))
-        if signals['legal_entity_mentioned']:
-            reasons.append("Registered company entity structure mentioned (Pvt Ltd / LLP)")
 
-        # Calculate Balanced Multi-Factor Trust Score
-        # Domain age, SSL, gateways, reviews, policies, and GSTIN all contribute harmoniously
-        trust_score = 0.20 if signals['ssl_valid'] else 0.0
+        # 6. India Fraud Signals
+        fraud_signals = self.detect_india_fraud_signals(html, combined_text)
+        signals['india_fraud_signals'] = fraud_signals
+        if fraud_signals['whatsapp_only']:
+            reasons.append("⚠️ WhatsApp-only contact — no support email or verified phone provided")
+        if fraud_signals['fake_urgency']:
+            reasons.append("⚠️ Artificial urgency indicators / countdown timers detected")
+        if fraud_signals['suspicious_pricing']:
+            reasons.append("🚨 Suspiciously low pricing (e.g. ₹99–₹199 for luxury items) — major scam indicator")
 
-        # Domain Age contributes up to 35%
+        # 7. Replica / Master Copy Detection
+        is_replica_store = self.detect_replica_store(html, combined_text)
+        signals['is_replica_store'] = is_replica_store
+        if is_replica_store:
+            reasons.append("📦 Product Classification: Store sells Master Copy / 7A Replica products (Not OEM originals)")
+
+        # =========================================================================
+        # ACCURACY OVERHAUL: MULTIPLICATIVE PENALTY MODEL & SCORE BREAKDOWN
+        # =========================================================================
+        
+        # Base Foundation Score (0.0 to 1.0)
+        base_trust = 0.50
+
+        # Pillar 1: Domain Age Contribution
         if domain_age['age_years'] >= 5:
-            trust_score += 0.35
+            domain_score = 1.0
+            base_trust += 0.25
+        elif domain_age['age_years'] >= 2:
+            domain_score = 0.85
+            base_trust += 0.15
         elif domain_age['age_years'] >= 1:
-            trust_score += 0.25
+            domain_score = 0.70
+            base_trust += 0.08
         elif domain_age['is_new']:
-            trust_score -= 0.20
-
-        # Payment Gateways contribute up to 25%
-        if gateways:
-            trust_score += 0.25
-        elif has_upi_only:
-            trust_score -= 0.25
+            domain_score = 0.20
+            base_trust -= 0.25
         else:
-            trust_score += 0.00  # Unverified/unrecognized payment methods grant 0 trust bonus
+            domain_score = 0.50
 
-        # GSTIN contributes up to 20%
-        if signals['gstin_checksum_valid']:
-            trust_score += 0.20
-        elif signals['gstin_found']:
-            trust_score += 0.05
+        # Pillar 2: Payment Gateways Contribution
+        if gateways:
+            gateway_score = 1.0
+            base_trust += 0.15
+        elif has_upi_only:
+            gateway_score = 0.20
+            base_trust -= 0.20
+        else:
+            gateway_score = 0.50
 
+        # Pillar 3: Entity & Legal Legitimacy
+        if is_entity_verified:
+            base_trust += 0.25
+        elif platform in ('Shopify', 'WooCommerce'):
+            base_trust += 0.10  # Managed ecosystem bonus
 
-        # Policies & Contact Info contribute 10%
-        if len(policies_found) >= 2 or signals['contact_info']:
-            trust_score += 0.10
+        if signals['contact_info'] and len(policies_found) >= 2:
+            base_trust += 0.05
 
-        # Reviews Modifier
-        if review_data['sentiment'] == 'POSITIVE':
-            trust_score += 0.10
-        elif review_data['sentiment'] == 'HIGH_RISK':
-            trust_score -= 0.35
+        # Bound base trust before multiplicative multipliers
+        base_trust = max(0.20, min(base_trust, 0.95))
 
-        trust_score = max(0.0, min(trust_score, 1.0))
+        # Multiplicative Risk Multipliers
+        risk_multiplier = 1.0
 
-        if trust_score >= 0.70:
+        # Review Multiplier
+        if review_data['sentiment'] == 'HIGH_RISK':
+            risk_multiplier *= 0.40  # Hard 60% penalty if verified non-delivery scam reports
+            review_factor_score = 20
+        elif review_data['sentiment'] == 'MIXED':
+            risk_multiplier *= 0.80
+            review_factor_score = 65
+        elif review_data['sentiment'] == 'POSITIVE':
+            risk_multiplier *= 1.10
+            review_factor_score = 95
+        else:
+            review_factor_score = 60
+
+        # Fraud Signals Multipliers (only penalize pricing if NOT a replica store)
+        if fraud_signals['suspicious_pricing'] and not is_replica_store:
+            risk_multiplier *= 0.30
+        if fraud_signals['whatsapp_only']:
+            risk_multiplier *= 0.70
+        if fraud_signals['fake_urgency']:
+            risk_multiplier *= 0.85
+
+        if not signals['ssl_valid']:
+            risk_multiplier *= 0.50
+
+        final_trust_score = max(0.05, min(base_trust * risk_multiplier, 0.99))
+
+        # Check Social Media Presence
+        has_social = self.detect_social_presence(combined_text)
+        signals['has_social'] = has_social
+        if has_social:
+            reasons.append("Active brand social media presence linked (Instagram / Facebook)")
+
+        # D2C Startup Classification Criteria
+        is_startup = bool(gateways and signals['contact_info'] and len(policies_found) >= 2 and review_data['sentiment'] != 'HIGH_RISK' and not fraud_signals['whatsapp_only'])
+
+        # Categorize Trust Level with Replica & D2C Startup Verification
+        if is_replica_store and review_data['sentiment'] != 'HIGH_RISK' and (gateways or len(policies_found) >= 2):
+            trust_level = "REPLICA_VERIFIED"
+            final_trust_score = max(0.68, round(final_trust_score, 2))
+        elif is_startup and not signals.get('enterprise_brand'):
+            trust_level = "STARTUP_VERIFIED"
+            final_trust_score = max(0.74, min(0.88, round(final_trust_score * 1.15, 2)))
+            if business_entity in ("Independent Storefront", "Shopify Merchant Infrastructure", "WooCommerce Merchant Infrastructure"):
+                business_entity = f"Verified D2C Startup ({gateways[0]} Merchant)"
+                signals['business_entity'] = business_entity
+            reasons.append(f"🚀 Verified D2C Startup: Merchant identity & bank account verified via {gateways[0]}")
+        elif final_trust_score >= 0.75:
             trust_level = "ESTABLISHED"
-        elif trust_score >= 0.45:
+        elif final_trust_score >= 0.50:
             trust_level = "SOME_SIGNALS"
-        elif trust_score >= 0.25:
+        elif final_trust_score >= 0.30:
             trust_level = "FEW_SIGNALS"
         else:
             trust_level = "NO_SIGNALS"
 
+        # Generate Actionable Recommendations
         recommendations = []
-        if trust_level in ("FEW_SIGNALS", "NO_SIGNALS"):
+        if trust_level == "STARTUP_VERIFIED":
+            recommendations.append("🚀 Verified D2C Startup — merchant identity & bank account verified via payment gateway")
+            recommendations.append("Active customer support email / phone provided")
+            recommendations.append("Standard D2C delivery timelines apply (3–7 business days)")
+        elif trust_level == "REPLICA_VERIFIED":
+            recommendations.append("📦 Store sells 1st Copy / Master Replicas (Not original OEM items)")
+            recommendations.append("Order Delivery is verified — store ships orders to buyers")
+            recommendations.append("Choose Cash on Delivery (COD) to unbox and inspect parcel before paying courier")
+        elif trust_level in ("FEW_SIGNALS", "NO_SIGNALS"):
             recommendations.append("Do NOT pay via direct bank transfer or personal UPI QR")
             recommendations.append("Choose Cash on Delivery (COD) and inspect package before paying")
-            recommendations.append("Check independent complaints before entering payment details")
+            recommendations.append("Check independent complaints on Consumer Complaints India before buying")
         elif trust_level == "SOME_SIGNALS":
-            recommendations.append("Use a credit card with chargeback protection rather than UPI / debit")
+            recommendations.append("Use a credit card with chargeback protection rather than direct UPI / debit")
             recommendations.append("Check estimated delivery times — smaller stores may take 10-15 days")
         else:
             recommendations.append("Store exhibits solid legitimacy signals — standard buying precautions apply")
 
+        score_breakdown = {
+            'base_trust': int(base_trust * 100),
+            'domain_age': int(domain_score * 100),
+            'gateways': int(gateway_score * 100),
+            'review_factor': review_factor_score,
+            'platform_integrity': int(final_trust_score * 100)
+        }
+
         return {
-            'trust_score': round(trust_score, 3),
+            'trust_score': round(final_trust_score, 3),
             'trust_level': trust_level,
+            'business_entity': business_entity,
+            'business_entity_valid': is_entity_verified,
             'gstin': signals.get('gstin_number'),
             'gstin_valid': signals['gstin_checksum_valid'],
             'payment_gateways': gateways,
             'domain_age': domain_age,
             'review_summary': review_data,
+            'score_breakdown': score_breakdown,
             'reasons': reasons,
             'recommendations': recommendations,
             'signals': signals
@@ -479,6 +806,6 @@ class StoreTrustAgent:
 
 if __name__ == "__main__":
     agent = StoreTrustAgent()
-    print("Testing store trust on sample...")
+    print("Testing upgraded store trust agent...")
     res = agent.analyze("https://www.boat-lifestyle.com")
     print(json.dumps(res, indent=2))

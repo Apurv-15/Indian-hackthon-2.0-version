@@ -1,9 +1,9 @@
 """
 Persistent Flask bridge server.
 Models are loaded ONCE on startup and stay in memory.
-The Next.js API route calls http://localhost:5001/analyze.
+Serves requests from Chrome Extension and Next.js frontend.
 """
-import os, sys, warnings
+import os, sys, warnings, logging
 os.environ["TOKENIZERS_PARALLELISM"] = "false"
 os.environ["OMP_NUM_THREADS"] = "1"
 os.environ["MKL_NUM_THREADS"] = "1"
@@ -11,23 +11,28 @@ warnings.filterwarnings("ignore")
 
 import io
 sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8')
-
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 
+import traceback
+from concurrent.futures import ThreadPoolExecutor, TimeoutError as ExecTimeoutError
 from flask import Flask, request, jsonify
 from flask_cors import CORS
 from app import system
 from agents.agent5_store_trust import StoreTrustAgent
 
 app = Flask(__name__)
-CORS(app) # Allow cross-origin requests from the browser extension
+# Restrict CORS to localhost and browser extension schemes
+CORS(app, resources={r"/*": {"origins": ["http://localhost:*", "http://127.0.0.1:*", "chrome-extension://*"]}})
 
 store_trust_agent = StoreTrustAgent()
+executor = ThreadPoolExecutor(max_workers=4)
+
+REQUEST_TIMEOUT_SECONDS = 10.0
 
 
 @app.route("/health", methods=["GET"])
 def health():
-    return jsonify({"status": "ok"})
+    return jsonify({"status": "ok", "service": "AegisAI Bridge"})
 
 
 @app.route("/analyze", methods=["POST"])
@@ -40,14 +45,16 @@ def analyze():
     if not user_input:
         return jsonify({"error": "No input provided"}), 400
 
-    try:
-        result = system.analyze(user_input, anchor_text=anchor_text, page_url=page_url)
+    def _run_analysis():
+        return system.analyze(user_input, anchor_text=anchor_text, page_url=page_url)
 
-        # Map to the schema expected by the Next.js frontend
+    try:
+        future = executor.submit(_run_analysis)
+        result = future.result(timeout=REQUEST_TIMEOUT_SECONDS)
+
         risk_map = {"MINIMAL": "Safe", "LOW": "Low", "MEDIUM": "Medium", "HIGH": "High", "CRITICAL": "Critical"}
         risk_level = risk_map.get(result["risk_level"], "Medium")
-        print(f"🔍 [Extension Request] Scanned: {user_input[:80]} | Anchor: '{anchor_text[:30]}' -> Result: {risk_level} ({result['risk_level']}) | Score: {result['risk_score']}", flush=True)
-
+        print(f"🔍 [Bridge] Scanned: {user_input[:80]} | Anchor: '{anchor_text[:30]}' -> Result: {risk_level} ({result['risk_level']}) | Score: {result['risk_score']}", flush=True)
 
         return jsonify({
             "riskLevel": risk_level,
@@ -74,8 +81,12 @@ def analyze():
                 "attackCategories": result["detailed_results"]["agent4"].get("attack_categories", []),
             },
         })
+    except ExecTimeoutError:
+        print(f"⚠️ [Bridge] Timeout analyzing input: {user_input[:50]}", flush=True)
+        return jsonify({"error": "Analysis request timed out"}), 504
     except Exception as e:
-        return jsonify({"error": str(e)}), 500
+        print(f"❌ [Bridge Error] {traceback.format_exc()}", flush=True)
+        return jsonify({"error": "Internal analysis error occurred"}), 500
 
 
 @app.route("/store-trust", methods=["POST"])
@@ -88,13 +99,21 @@ def store_trust():
     if not (url.startswith("http://") or url.startswith("https://")):
         url = "https://" + url
 
+    def _run_trust():
+        return store_trust_agent.analyze(url)
+
     try:
-        result = store_trust_agent.analyze(url)
+        future = executor.submit(_run_trust)
+        result = future.result(timeout=18.0)
         return jsonify(result)
+    except ExecTimeoutError:
+        print(f"⚠️ [Bridge] Timeout analyzing store trust: {url}", flush=True)
+        return jsonify({"error": "Store trust lookup timed out"}), 504
     except Exception as e:
-        return jsonify({"error": str(e)}), 500
+        print(f"❌ [Bridge Store Trust Error] {traceback.format_exc()}", flush=True)
+        return jsonify({"error": "Internal store trust error occurred"}), 500
 
 
 if __name__ == "__main__":
-    print("🚀 AegisAI Python bridge running on http://localhost:5001")
+    print("🚀 AegisAI Python bridge running on http://127.0.0.1:5001")
     app.run(host="127.0.0.1", port=5001, debug=False)
