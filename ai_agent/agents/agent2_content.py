@@ -282,7 +282,13 @@ class ContentAnalysisAgent:
                 'github.com', 'sbi.co.in', 'onlinesbi.sbi', 'onlinesbi.com',
                 'hdfcbank.com', 'hdfc.com', 'icicibank.com', 'axisbank.com',
                 'kotak.com', 'paytm.com', 'phonepe.com', 'indiapost.gov.in',
-                'shiprocket.in', 'shiprocket.com', 'bluedart.com'
+                'shiprocket.in', 'shiprocket.com', 'bluedart.com',
+                'flipkart.com', 'flipkart.net', 'myntra.com', 'meesho.com',
+                'tatacliq.com', 'tata.com', 'nykaa.com', 'ajio.com',
+                'reliancedigital.in', 'jiomart.com', 'jio.com', 'zomato.com',
+                'swiggy.com', 'blinkit.com', 'zepto.com', 'zeptonow.com',
+                'croma.com', 'bigbasket.com', 'boat-lifestyle.com',
+                'wikipedia.org', 'reddit.com', 'twitter.com', 'x.com'
             }
             is_official = any(parsed_host == h or parsed_host.endswith('.' + h) for h in legit_hosts)
 

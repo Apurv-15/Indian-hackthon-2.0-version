@@ -106,10 +106,7 @@ document.addEventListener("mouseover", (e) => {
                 marker.style.color = RISK_COLORS[response.riskLevel];
                 marker.style.opacity = "1";
                 const isHighRisk = response.riskLevel === "High" || response.riskLevel === "Critical";
-                target.style.borderBottom = `${isHighRisk ? '3px' : '2px'} solid ${RISK_COLORS[response.riskLevel]}`;
                 if (isHighRisk) {
-                  target.style.color = RISK_COLORS[response.riskLevel];
-                  target.style.fontWeight = "bold";
                   target.title = `🚨 ${response.riskLevel.toUpperCase()} RISK — ${response.threatType}`;
                 }
                 if (target.matches(':hover')) {
@@ -181,10 +178,7 @@ function scanAllLinks() {
                     marker.style.color = RISK_COLORS[response.riskLevel];
                     marker.style.opacity = "1";
                     const isHighRisk = response.riskLevel === "High" || response.riskLevel === "Critical";
-                    target.style.borderBottom = `${isHighRisk ? '3px' : '2px'} solid ${RISK_COLORS[response.riskLevel]}`;
                     if (isHighRisk) {
-                      target.style.color = RISK_COLORS[response.riskLevel];
-                      target.style.fontWeight = "bold";
                       target.title = `🚨 ${response.riskLevel.toUpperCase()} RISK — ${response.threatType}`;
                     }
                 }

@@ -17,7 +17,7 @@ import json
 import time
 import requests
 from datetime import datetime
-from urllib.parse import urlparse, urljoin
+from urllib.parse import urlparse, urljoin, quote_plus
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
 try:
@@ -33,7 +33,7 @@ class StoreTrustAgent:
     PHONE_RE = re.compile(r'(\+91[\-\s]?)?[6-9]\d{9}\b')
     EMAIL_RE = re.compile(r'[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}')
     PINCODE_RE = re.compile(r'\b\d{6}\b')
-    LEGAL_SUFFIX_RE = re.compile(r'\b([A-Z][A-Za-z0-9\s,\.&amp;\-]{2,40}\s*(?:Pvt\.?\s*Ltd|Private\s+Limited|Limited|LLP|Enterprise|Enterprises))\b', re.IGNORECASE)
+    LEGAL_SUFFIX_RE = re.compile(r'\b([A-Z][A-Za-z0-9\s,\.&amp;\-]{2,40}\s*(?:Pvt\.?\s*Ltd|Private\s+Limited|Public\s+Limited|LLP|Enterprise|Enterprises|(?:(?<!Edition\s)Limited(?![\s\-]+(?:Edition|Stock|Offer|Time|Series|Quantity|Collection|Warranty|Run|Drop)))))\b')
     POLICY_KEYWORDS = ['return', 'refund', 'shipping', 'privacy policy', 'terms of service', 'terms & conditions', 'contact us']
     LINK_KEYWORDS = ['term', 'privacy', 'refund', 'return', 'shipping', 'about', 'contact', 'legal', 'polic']
 
@@ -73,7 +73,7 @@ class StoreTrustAgent:
     }
 
     FALLBACK_PATHS = [
-        '/policies/refund-policy', '/policies/terms-of-service', '/policies/privacy-policy',
+        '/checkout', '/cart', '/policies/refund-policy', '/policies/terms-of-service', '/policies/privacy-policy',
         '/pages/about-us', '/pages/contact-us', '/about-us', '/contact-us',
         '/terms-and-conditions', '/privacy-policy', '/refund-policy', '/return-policy'
     ]
@@ -274,11 +274,31 @@ class StoreTrustAgent:
         'submit your complaint', 'online review & complaint portal', 'write your review',
         'share your experience', 'product/brand information is coming soon', 'stay tuned for updates',
         'evaluating', 'considering', 'based on recent reviews', 'your experience can help others',
-        'see what', 'customer care', 'toll free number', 'contact details', 'is legit or a scam'
+        'see what', 'customer care', 'toll free number', 'contact details', 'is legit or a scam',
+        # Self-promotion / portal boilerplate patterns
+        'ordering through whatsapp', 'ordering through whats', '90% customers', 'make the right choice',
+        'join the', 'read honest', 'file complaints against', 'collects customer reviews',
+        'read genuine customer', 'help millions', 'already reviewed', 'make better choices',
+        'polarized customer experience', 'file your review', 'submit your review',
+        'read consumer reviews of', 'all shops and services in india'
     ]
 
-    def _clean_and_filter_snippet(self, s):
-        """Clean HTML entities and filter out noisy template meta-descriptions."""
+    # Trusted external review/complaint portals — snippets MUST come from one of these OR from target domain
+    TRUSTED_REVIEW_PORTALS = [
+        'trustpilot.com', 'mouthshut.com', 'consumercomplaints.in', 'complaintlists.com',
+        'raiseacomplaint.com', 'sitejabber.com', 'reviews.io', 'g2.com',
+        'complaintsboard.com', 'indiamart.com', 'justuseapp.com', 'reddit.com',
+        'quora.com', 'ratingfacts.com', 'productreview.com.au'
+    ]
+
+    def _clean_and_filter_snippet(self, s, target_domain=None, result_url=None):
+        """Clean HTML entities and filter out noisy template meta-descriptions.
+        
+        Args:
+            s: Raw snippet HTML/text
+            target_domain: The store domain being analyzed (e.g. 'mrktrends.in')
+            result_url: The URL this snippet was fetched from (for domain validation)
+        """
         if not s or len(s) < 35:
             return None
         import html as html_lib
@@ -286,17 +306,36 @@ class StoreTrustAgent:
         s = re.sub(r'<[^>]+>', '', s).strip()
         s_lower = s.lower()
         
-        # Drop generic site meta-templates
+        # Drop generic site meta-templates and self-promotion
         if any(pat in s_lower for pat in self.NOISE_PATTERNS):
             return None
+
+        # If result_url is known, validate it comes from target domain or a trusted review portal
+        if result_url and target_domain:
+            result_url_lower = result_url.lower().strip()
+            target_bare = target_domain.lower().replace('www.', '').split(':')[0]
+            # Strip out subdomain for matching (e.g. 'www.trustpilot.com' → 'trustpilot.com')
+            is_trusted_portal = any(portal in result_url_lower for portal in self.TRUSTED_REVIEW_PORTALS)
+            is_target_own_site = target_bare in result_url_lower
+            if not is_trusted_portal and not is_target_own_site:
+                return None  # Discard snippet from unrelated domain
+            # If snippet comes from target's own site, it's self-promotion — discard
+            if is_target_own_site and not is_trusted_portal:
+                return None
             
         # Ensure it contains actual customer experience content
-        useful_words = ['buy', 'bought', 'order', 'ordered', 'deliver', 'delivered', 'product', 'item', 'quality', 'money', 'service', 'support', 'return', 'refund', 'scam', 'fake', 'good', 'bad', 'working', 'broke', 'tracking', 'received', 'got', 'never', 'delay']
+        useful_words = [
+            'buy', 'bought', 'order', 'ordered', 'deliver', 'delivered', 'product', 'item',
+            'quality', 'money', 'service', 'support', 'return', 'refund', 'scam', 'fake',
+            'good', 'bad', 'working', 'broke', 'tracking', 'received', 'got', 'never', 'delay',
+            'complaint', 'fraud', 'issue', 'problem', 'cheat', 'review', 'rating', 'star',
+            'authentic', 'genuine', 'legit', 'trust', 'reliable', 'recommend'
+        ]
         if not any(w in s_lower for w in useful_words):
             return None
         return s
 
-    def _query_search_snippets(self, query):
+    def _query_search_snippets(self, query, target_domain=None):
         """Helper to query search engines & review portals with TLS browser impersonation."""
         headers = {
             'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
@@ -305,18 +344,29 @@ class StoreTrustAgent:
         }
         
         # 1. Try DDG with curl_cffi TLS impersonation
+        # FIX: URL-encode the query to prevent mismatched results (e.g. mrktrends vs cartrends)
         try:
-            url = f"https://html.duckduckgo.com/html/?q={query}"
+            encoded_query = quote_plus(query)
+            url = f"https://html.duckduckgo.com/html/?q={encoded_query}"
             if HAS_CURL_CFFI:
                 resp = cffi_requests.get(url, timeout=5, impersonate="chrome120", headers=headers)
             else:
                 resp = requests.get(url, timeout=4, headers=headers)
 
             if resp.status_code == 200:
-                raw_snippets = re.findall(r'<a class="result__snippet[^>]*>(.*?)</a>', resp.text, re.DOTALL)
+                # Extract result URL alongside each snippet for domain validation
+                result_blocks = re.findall(
+                    r'<a class="result__url[^>]*>([^<]+)</a>.*?<a class="result__snippet[^>]*>(.*?)</a>',
+                    resp.text, re.DOTALL
+                )
                 clean_snippets = []
-                for s in raw_snippets[:6]:
-                    cleaned = self._clean_and_filter_snippet(s)
+                # Also try simpler pattern if block extraction didn't find enough
+                raw_snippets = re.findall(r'<a class="result__snippet[^>]*>(.*?)</a>', resp.text, re.DOTALL)
+                raw_urls = re.findall(r'<a class="result__url[^>]*>\s*([^\s<]+)\s*</a>', resp.text)
+
+                for i, s in enumerate(raw_snippets[:8]):
+                    result_url = raw_urls[i].strip() if i < len(raw_urls) else None
+                    cleaned = self._clean_and_filter_snippet(s, target_domain=target_domain, result_url=result_url)
                     if cleaned:
                         clean_snippets.append(cleaned)
                 if clean_snippets:
@@ -324,18 +374,24 @@ class StoreTrustAgent:
         except Exception:
             pass
 
-        # 2. Fallback to direct ConsumerComplaints India query if target specified
+        # 2. Fallback to direct ConsumerComplaints India query
         if 'consumercomplaints' in query or 'mouthshut' in query:
             clean_dom = query.split()[-1]
             try:
-                target_url = f"https://www.consumercomplaints.in/search?q={clean_dom}"
+                target_url = f"https://www.consumercomplaints.in/search?q={quote_plus(clean_dom)}"
                 if HAS_CURL_CFFI:
                     resp = cffi_requests.get(target_url, timeout=5, impersonate="chrome120", headers=headers)
                     if resp.status_code == 200:
-                        complaint_titles = re.findall(r'<td[^>]*class=["\']complaint-title["\'][^>]*>(.*?)</td>', resp.text, re.DOTALL)
+                        complaint_titles = re.findall(
+                            r'<td[^>]*class=["\']complaint-title["\'][^>]*>(.*?)</td>',
+                            resp.text, re.DOTALL
+                        )
                         clean_titles = []
                         for t in complaint_titles[:4]:
-                            cleaned = self._clean_and_filter_snippet(t)
+                            cleaned = self._clean_and_filter_snippet(
+                                t, target_domain=target_domain,
+                                result_url='consumercomplaints.in'
+                            )
                             if cleaned:
                                 clean_titles.append(f"Buyer Complaint: {cleaned}")
                         if clean_titles:
@@ -345,41 +401,148 @@ class StoreTrustAgent:
 
         return []
 
-    def fetch_customer_reviews(self, domain):
-        """Fetch customer review sentiment using parallel multi-source queries."""
+    def _fetch_trustpilot_rating(self, domain):
+        """
+        Scrape Trustpilot's public page for AggregateRating JSON-LD data.
+        No API key required — uses the public review page.
+        Returns dict with rating_value (1-5), review_count, source or None.
+        """
+        headers = {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/120.0.0.0 Safari/537.36',
+            'Accept': 'text/html,*/*',
+            'Accept-Language': 'en-US,en;q=0.9',
+        }
+        clean = domain.replace('www.', '').split(':')[0]
+        try:
+            if HAS_CURL_CFFI:
+                resp = cffi_requests.get(
+                    f"https://www.trustpilot.com/review/{clean}",
+                    timeout=6, impersonate="chrome120", headers=headers
+                )
+            else:
+                resp = requests.get(
+                    f"https://www.trustpilot.com/review/{clean}",
+                    timeout=6, headers=headers
+                )
+            if resp.status_code != 200:
+                return None
+            text = resp.text
+            # Parse JSON-LD AggregateRating
+            ld_blocks = re.findall(r'<script[^>]*type=["\']application/ld\+json["\'][^>]*>(.*?)</script>', text, re.DOTALL)
+            for block in ld_blocks:
+                try:
+                    data = json.loads(block.strip())
+                    items = data if isinstance(data, list) else [data]
+                    for item in items:
+                        agg = item.get('aggregateRating', {})
+                        if agg and agg.get('ratingValue'):
+                            return {
+                                'rating_value': float(agg['ratingValue']),
+                                'review_count': int(agg.get('reviewCount', agg.get('ratingCount', 0))),
+                                'source': 'Trustpilot'
+                            }
+                except Exception:
+                    pass
+            # Fallback: grep meta tags
+            rv = re.search(r'"ratingValue"\s*:\s*"?([0-9.]+)"?', text)
+            rc = re.search(r'"reviewCount"\s*:\s*"?([0-9]+)"?', text)
+            if rv:
+                return {
+                    'rating_value': float(rv.group(1)),
+                    'review_count': int(rc.group(1)) if rc else 0,
+                    'source': 'Trustpilot'
+                }
+        except Exception:
+            pass
+        return None
+
+    def _fetch_store_embedded_reviews(self, html):
+        """
+        Parse JSON-LD schema.org Review/AggregateRating blocks embedded
+        in the store's own HTML. Covers Judge.me, Okendo, Yotpo, etc.
+        Returns (rating_value or None, list of review text snippets).
+        """
+        snippets = []
+        rating = None
+        ld_blocks = re.findall(r'<script[^>]*type=["\']application/ld\+json["\'][^>]*>(.*?)</script>', html, re.DOTALL)
+        for block in ld_blocks:
+            try:
+                data = json.loads(block.strip())
+                items = data if isinstance(data, list) else [data]
+                for item in items:
+                    # AggregateRating
+                    agg = item.get('aggregateRating', {})
+                    if agg and not rating:
+                        try:
+                            rating = float(agg.get('ratingValue', 0))
+                        except Exception:
+                            pass
+                    # Individual reviews
+                    reviews = item.get('review', item.get('reviews', []))
+                    if isinstance(reviews, dict):
+                        reviews = [reviews]
+                    for r in reviews[:6]:
+                        body = r.get('reviewBody', r.get('description', ''))
+                        if body and len(body) > 30:
+                            snippets.append(body[:250])
+            except Exception:
+                pass
+        return rating, snippets
+
+    def fetch_customer_reviews(self, domain, store_html=None):
+        """
+        Multi-strategy customer review fetcher.
+
+        Strategy (most reliable first):
+        1. Embedded JSON-LD schema reviews in store HTML (Judge.me, Okendo, Yotpo)
+        2. Trustpilot public page AggregateRating (star rating → sentiment)
+        3. DuckDuckGo search snippets with strict domain validation (last resort)
+        """
         clean_domain = domain.lower().replace('www.', '').split(':')[0]
         brand_name = clean_domain.split('.')[0].capitalize()
-        
+
         sources = [
-            {'name': 'Google Reviews Search', 'url': f"https://www.google.com/search?q={clean_domain}+reviews+complaints"},
             {'name': 'Trustpilot', 'url': f"https://www.trustpilot.com/review/{clean_domain}"},
             {'name': 'Consumer Complaints India', 'url': f"https://www.consumercomplaints.in/search?q={clean_domain}"},
             {'name': 'MouthShut India', 'url': f"https://www.mouthshut.com/search/result.aspx?q={clean_domain}"}
         ]
 
-        queries = [
-            f"{clean_domain} reviews complaints experience",
-            f"site:consumercomplaints.in {clean_domain}",
-            f"site:mouthshut.com {clean_domain}"
-        ]
-
         all_snippets = []
-        with ThreadPoolExecutor(max_workers=3) as executor:
-            future_to_query = {executor.submit(self._query_search_snippets, q): q for q in queries}
-            for future in as_completed(future_to_query):
+        tp_rating = None
+        store_rating = None
+
+        # --- Strategy 1: Embedded store JSON-LD reviews ---
+        if store_html:
+            store_rating, embedded = self._fetch_store_embedded_reviews(store_html)
+            all_snippets.extend(embedded)
+
+        # --- Strategy 2: Trustpilot public rating (run in background thread) ---
+        with ThreadPoolExecutor(max_workers=2) as executor:
+            tp_future = executor.submit(self._fetch_trustpilot_rating, clean_domain)
+            # Strategy 3: DDG search fallback (parallel)
+            ddg_queries = [
+                f"{clean_domain} reviews complaints experience",
+                f"site:consumercomplaints.in {clean_domain}",
+            ]
+            ddg_futures = {
+                executor.submit(self._query_search_snippets, q, clean_domain): q
+                for q in ddg_queries
+            }
+            # Collect DDG results
+            for future in as_completed(ddg_futures):
                 res = future.result()
                 if res:
                     all_snippets.extend(res)
+            # Collect Trustpilot rating
+            try:
+                tp_rating = tp_future.result(timeout=7)
+            except Exception:
+                tp_rating = None
 
         # Deduplicate snippets
         unique_snippets = list(dict.fromkeys(all_snippets))[:8]
         combined_snippets = " ".join(unique_snippets).lower()
-        has_meaningful_results = bool(unique_snippets)
-
-        # Signal dictionaries
-        positive_signals = ['legit', 'genuine', 'good quality', 'fast delivery', 'authentic', 'trusted', 'reliable', '5 star', 'happy customer']
-        complaint_signals = ['slow delivery', 'delayed delivery', 'late delivery', 'poor customer support', 'refund delayed', 'hard to return', 'poor packaging']
-        fraud_signals = ['scam', 'fraud', 'never delivered', 'fake website', 'fake tracking', 'money deducted no order', 'do not buy', 'cheated', 'complaint']
+        has_meaningful_results = bool(unique_snippets or tp_rating or store_rating)
 
         service_issue_signals = {
             'delivery delays': ['slow delivery', 'delayed delivery', 'late delivery', 'delivery delay'],
@@ -387,56 +550,96 @@ class StoreTrustAgent:
             'refund/return friction': ['refund delayed', 'hard to return', 'return issue', 'refund issue'],
             'product quality concerns': ['poor packaging', 'damaged product', 'fake product', 'defective']
         }
+        issue_mentions = [
+            label for label, kws in service_issue_signals.items()
+            if any(self._score_phrase(kw, combined_snippets) for kw in kws)
+        ]
 
-        pos_count = sum(1 for phrase in positive_signals if self._score_phrase(phrase, combined_snippets))
-        comp_count = sum(1 for phrase in complaint_signals if self._score_phrase(phrase, combined_snippets))
-        fraud_count = sum(1 for phrase in fraud_signals if self._score_phrase(phrase, combined_snippets))
+        # -----------------------------------------------------------------------
+        # Determine sentiment — prefer hard rating data over text heuristics
+        # -----------------------------------------------------------------------
+        # Use Trustpilot star rating if available (most reliable signal)
+        effective_rating = tp_rating['rating_value'] if tp_rating else store_rating
+        tp_review_count = tp_rating['review_count'] if tp_rating else 0
 
-        issue_mentions = []
-        for label, keywords in service_issue_signals.items():
-            if any(self._score_phrase(kw, combined_snippets) for kw in keywords):
-                issue_mentions.append(label)
-
-        if fraud_count >= 2 and fraud_count > pos_count:
-            sentiment = "HIGH_RISK"
-            rating_label = "🚨 High Risk — Buyer Complaints"
-            summary = "Multiple buyers report non-delivery or unfulfilled orders on external consumer forums."
-            takeaways = [
-                "Repeated scam / non-delivery complaints detected",
-                "Fake tracking or non-responsive support reported",
-                "Avoid prepaid orders; prefer COD if ordering"
-            ]
-        elif comp_count > 0 or (fraud_count > 0 and pos_count > 0):
-            sentiment = "MIXED"
-            rating_label = "⚠️ Mixed Customer Experiences"
-            if issue_mentions:
-                summary = f"Store delivers genuine items, but customers report {', '.join(issue_mentions[:2])}."
+        if effective_rating is not None:
+            if effective_rating >= 4.0:
+                sentiment = "POSITIVE"
+                rating_label = f"✅ Generally Positive Feedback ({effective_rating:.1f}★ on {tp_rating['source'] if tp_rating else 'Store Reviews'}, {tp_review_count:,} reviews)"
+                summary = f"Customers rate this store {effective_rating:.1f}/5 stars — products delivered as described."
+                takeaways = [
+                    f"{effective_rating:.1f}/5 star rating with {tp_review_count:,} verified reviews",
+                    "Smooth delivery experience reported by buyers",
+                    "Legitimate active store presence"
+                ]
+            elif effective_rating >= 2.5:
+                sentiment = "MIXED"
+                if issue_mentions:
+                    rating_label = f"⚠️ Mixed Reviews ({effective_rating:.1f}★, {tp_review_count:,} reviews)"
+                    summary = f"Store rated {effective_rating:.1f}/5 — delivers products but customers report {', '.join(issue_mentions[:2])}."
+                else:
+                    rating_label = f"⚠️ Mixed Customer Experiences ({effective_rating:.1f}★)"
+                    summary = f"Store rated {effective_rating:.1f}/5 with mixed customer feedback."
+                takeaways = [
+                    f"Average {effective_rating:.1f}/5 star rating ({tp_review_count:,} reviews)",
+                    "Some customers report service or delivery issues",
+                    "Prefer COD or use a credit card with chargeback protection"
+                ]
             else:
-                summary = "Store delivers products, but has occasional service or delivery complaints."
-            
-            takeaways = [
-                "Products are generally authentic",
-                "Delivery can take longer than advertised (1-2+ weeks)",
-                "Return or refund process may require follow-ups"
-            ]
-        elif pos_count > 0:
-            sentiment = "POSITIVE"
-            rating_label = "✅ Generally Positive Feedback"
-            summary = "Customers report receiving authentic products with reliable deliveries."
-            takeaways = [
-                "Verified genuine products and packaging",
-                "Smooth delivery experience reported by buyers",
-                "Legitimate active store presence"
-            ]
+                sentiment = "HIGH_RISK"
+                rating_label = f"🚨 High Risk — Poor Reviews ({effective_rating:.1f}★, {tp_review_count:,} reviews)"
+                summary = f"Store rated only {effective_rating:.1f}/5 — significant buyer complaints on record."
+                takeaways = [
+                    f"Very low {effective_rating:.1f}/5 star rating across {tp_review_count:,} reviews",
+                    "Serious complaints about non-delivery or fraud",
+                    "Avoid prepaid orders; prefer COD if absolutely necessary"
+                ]
         else:
-            sentiment = "NEUTRAL"
-            rating_label = "ℹ️ Moderate Independent Presence"
-            summary = f"No major scam complaints found for {brand_name}."
-            takeaways = [
-                "No critical scam or fraud flags reported",
-                "Independent review volume is moderate",
-                "Standard precautions (COD / Card protection) apply"
-            ]
+            # Fall back to text-signal heuristics when no rating data is available
+            positive_signals = ['legit', 'genuine', 'good quality', 'fast delivery', 'authentic', 'trusted', 'reliable', '5 star', 'happy customer']
+            complaint_signals = ['slow delivery', 'delayed delivery', 'late delivery', 'poor customer support', 'refund delayed', 'hard to return', 'poor packaging']
+            fraud_signals = ['scam', 'fraud', 'never delivered', 'fake website', 'fake tracking', 'money deducted no order', 'do not buy', 'cheated']
+
+            pos_count = sum(1 for p in positive_signals if self._score_phrase(p, combined_snippets))
+            comp_count = sum(1 for p in complaint_signals if self._score_phrase(p, combined_snippets))
+            fraud_count = sum(1 for p in fraud_signals if self._score_phrase(p, combined_snippets))
+
+            if fraud_count >= 2 and fraud_count > pos_count:
+                sentiment = "HIGH_RISK"
+                rating_label = "🚨 High Risk — Buyer Complaints"
+                summary = "Multiple buyers report non-delivery or unfulfilled orders on external consumer forums."
+                takeaways = [
+                    "Repeated scam / non-delivery complaints detected",
+                    "Fake tracking or non-responsive support reported",
+                    "Avoid prepaid orders; prefer COD if ordering"
+                ]
+            elif comp_count > 0 or (fraud_count > 0 and pos_count > 0):
+                sentiment = "MIXED"
+                rating_label = "⚠️ Mixed Customer Experiences"
+                summary = f"Store delivers products, but customers report {', '.join(issue_mentions[:2])}." if issue_mentions else "Store delivers products, but has occasional service or delivery complaints."
+                takeaways = [
+                    "Products are generally authentic",
+                    "Delivery can take longer than advertised (1-2+ weeks)",
+                    "Return or refund process may require follow-ups"
+                ]
+            elif pos_count > 0:
+                sentiment = "POSITIVE"
+                rating_label = "✅ Generally Positive Feedback"
+                summary = "Customers report receiving authentic products with reliable deliveries."
+                takeaways = [
+                    "Verified genuine products and packaging",
+                    "Smooth delivery experience reported by buyers",
+                    "Legitimate active store presence"
+                ]
+            else:
+                sentiment = "NEUTRAL"
+                rating_label = "ℹ️ Limited Independent Review Data"
+                summary = f"No external review data found for {brand_name} — store may be new or review volume is low."
+                takeaways = [
+                    "No critical scam or fraud flags detected",
+                    "Independent review volume is very low — proceed with caution",
+                    "Use COD or credit card with chargeback protection"
+                ]
 
         return {
             'sentiment': sentiment,
@@ -447,7 +650,9 @@ class StoreTrustAgent:
             'snippets': [s for s in unique_snippets if len(s) > 20][:4],
             'snippets_found': len(unique_snippets),
             'has_meaningful_results': has_meaningful_results,
-            'issue_mentions': issue_mentions
+            'issue_mentions': issue_mentions,
+            'trustpilot_rating': tp_rating,
+            'store_embedded_rating': store_rating
         }
 
     TRUSTED_PLATFORMS = {
@@ -534,15 +739,30 @@ class StoreTrustAgent:
         # Sub-pages fetch (Parallelized for maximum speed)
         sub_pages_html = []
         policy_links = self.find_policy_links(html, final_url)
-        if not policy_links:
-            policy_links = [urljoin(final_url, p) for p in self.FALLBACK_PATHS]
+        checkout_urls = [urljoin(final_url, '/checkout'), urljoin(final_url, '/cart')]
+        fallback_urls = [urljoin(final_url, p) for p in self.FALLBACK_PATHS]
         
-        with ThreadPoolExecutor(max_workers=4) as executor:
-            future_to_link = {executor.submit(self.fetch_page, link, 3.5): link for link in policy_links[:4]}
+        target_links = list(dict.fromkeys(checkout_urls + policy_links + fallback_urls))
+
+        with ThreadPoolExecutor(max_workers=8) as executor:
+            future_to_link = {executor.submit(self.fetch_page, link, 3.5): link for link in target_links[:8]}
             for future in as_completed(future_to_link):
                 sub_resp = future.result()
                 if sub_resp is not None and sub_resp.status_code < 400:
                     sub_pages_html.append(sub_resp.text)
+
+        combined_text = html + "\n" + "\n".join(sub_pages_html)
+
+        # Next.js / SPA JS Script Chunk Inspection for payment SDKs (e.g. checkout.razorpay.com)
+        chunk_paths = set(re.findall(r'/_next/static/chunks/[^\"]+\.js', combined_text))
+        relevant_chunks = [c for c in chunk_paths if any(kw in c.lower() for kw in ['checkout', 'cart', 'payment', 'order', 'app'])]
+        if relevant_chunks:
+            with ThreadPoolExecutor(max_workers=4) as chunk_executor:
+                chunk_futures = {chunk_executor.submit(self.fetch_page, urljoin(final_url, c), 3.0): c for c in relevant_chunks[:4]}
+                for future in as_completed(chunk_futures):
+                    c_resp = future.result()
+                    if c_resp is not None and c_resp.status_code < 400:
+                        sub_pages_html.append(c_resp.text)
 
         combined_text = html + "\n" + "\n".join(sub_pages_html)
 
@@ -561,13 +781,28 @@ class StoreTrustAgent:
         if not business_entity and cin_matches:
             business_entity = f"MCA Registered (CIN: {cin_matches[0]})"
 
-        # Check 3: Legal Entity Suffix found in footer/text
+        # Check 3: Legal Entity Suffix found in footer / policies / text
+        footer_match = re.search(r'<footer[^>]*>(.*?)</footer>', html, re.DOTALL | re.IGNORECASE)
+        footer_text = footer_match.group(1) if footer_match else ""
+        legal_context = footer_text + "\n" + "\n".join(sub_pages_html)
+
         if not business_entity:
-            legal_matches = self.LEGAL_SUFFIX_RE.findall(combined_text)
-            if legal_matches:
-                clean_name = legal_matches[0].strip()
-                if len(clean_name) > 5 and not any(kw in clean_name.lower() for kw in ['privacy', 'terms', 'return', 'refund', 'policy']):
-                    business_entity = clean_name.strip()
+            legal_matches = self.LEGAL_SUFFIX_RE.findall(legal_context) or self.LEGAL_SUFFIX_RE.findall(combined_text)
+            bad_kws = ['privacy', 'terms', 'return', 'refund', 'policy', ' x ', 'edition', 'watch', 'airpods', 'clone', 'replica', 'strap', 'case', 'buy', 'order', 'whatsapp']
+            for cand in legal_matches:
+                clean_name = cand.strip()
+                clean_lower = clean_name.lower()
+                if len(clean_name) > 5 and not any(kw in clean_lower for kw in bad_kws):
+                    business_entity = clean_name
+                    break
+
+        # Check 3b: Brand / Store Name in Footer Copyright (e.g. © 2026 MRk Trends)
+        if not business_entity:
+            cp_match = re.search(r'(?:©|&copy;|copyright)\s*(?:\d{4}(?:\s*-\s*\d{4})?)?\s*([A-Za-z0-9\s,\.\-&]{2,40}?)(?:\.|\s*all rights|\s*powered by|\s*<|$)', footer_text or html, re.IGNORECASE)
+            if cp_match:
+                cp_name = cp_match.group(1).strip()
+                if len(cp_name) > 2 and not any(kw in cp_name.lower() for kw in ['privacy', 'terms', 'return', 'refund', 'policy', 'all rights', 'wordpress', 'shopify', 'woocommerce']):
+                    business_entity = cp_name
 
         # Check 4: Valid GSTIN fallback
         gstin_matches = self.GSTIN_RE.findall(combined_text)
@@ -616,7 +851,7 @@ class StoreTrustAgent:
             reasons.append(f"⚠️ Brand new domain ({domain_age['age_days']} days old) — high risk of pop-up scam store")
 
         # 4. Customer Reviews & Reputation Sentiment
-        review_data = self.fetch_customer_reviews(domain)
+        review_data = self.fetch_customer_reviews(domain, store_html=html)
         signals['reviews'] = review_data
         if review_data['sentiment'] == 'HIGH_RISK':
             reasons.append(f"🚨 Customer Alerts: {review_data['summary']}")

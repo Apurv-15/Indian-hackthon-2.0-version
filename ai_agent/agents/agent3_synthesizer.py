@@ -51,7 +51,8 @@ class SynthesizerAgent:
         if agent2_results.get('is_raw_url'):
             url_risk_val = max(agent1_results.get('url_ml_risk', 0), agent1_results['url_risk'])
             domain_similarity = agent1_results.get('domain_similarity', 0)
-            sim_risk = 0.95 if domain_similarity > 0.7 else (domain_similarity * 0.5)
+            # Typosquatting risk only applies if domain similarity is high (>= 0.75)
+            sim_risk = 0.95 if domain_similarity >= 0.75 else 0.0
             a2_phishing = agent2_results.get('phishing_probability', 0)
 
             # Factor in anchor-text semantic divergence if provided
@@ -63,9 +64,9 @@ class SynthesizerAgent:
                 divergence_penalty = 0.35
 
             # If the URL is clean (no heuristic flags, no typosquatting, no phishing keywords/divergence)
-            if agent1_results.get('url_risk', 0) == 0.0 and domain_similarity == 0.0 and a2_phishing == 0.0 and divergence_penalty == 0.0:
-                # Dampen raw ML noise on clean URLs (prevents false positives on benign websites)
-                url_risk_val = min(url_risk_val, 0.20)
+            if agent1_results.get('url_risk', 0) == 0.0 and sim_risk == 0.0 and a2_phishing == 0.0 and divergence_penalty == 0.0:
+                # Clean verified URL - ML noise must not raise threat level
+                return 0.0
 
             # Weighted: 70% Agent1 URL analysis, 30% Agent2 URL-text analysis + divergence
             combined = max(url_risk_val, sim_risk) * 0.7 + a2_phishing * 0.3 + divergence_penalty
@@ -274,11 +275,14 @@ class SynthesizerAgent:
             agent1_results, agent2_results, agent4_results, threat_types, risk_score
         )
         
-        # Confidence: Now dynamically reflects certainty in the verdict
+        # Confidence: Dynamically reflects certainty in the verdict
         # Higher confidence when risk_score is closer to extremes (0.0 or 1.0)
-        # Lower confidence when score is near the middle (0.5)
-        distance_from_borderline = abs(risk_score - 0.5)
-        confidence = 0.5 + distance_from_borderline
+        # For Safe / Minimal threats, certainty in legitimacy is 95%+
+        if risk_level == "MINIMAL" or risk_score <= 0.15:
+            confidence = max(0.95, 1.0 - risk_score)
+        else:
+            distance_from_borderline = abs(risk_score - 0.5)
+            confidence = 0.5 + distance_from_borderline
 
         
         result = {

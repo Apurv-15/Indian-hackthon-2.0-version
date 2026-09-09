@@ -1,0 +1,10 @@
+{
+  "venvPath": ".",
+  "venv": ".venv",
+  "extraPaths": [
+    ".",
+    "ai_agent"
+  ],
+  "pythonVersion": "3.9",
+  "reportMissingImports": true
+}

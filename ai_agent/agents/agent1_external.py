@@ -123,7 +123,24 @@ class ExternalAnalysisAgent:
             'shiprocket': ['shiprocket.in', 'shiprocket.com'],
             'bluedart': ['bluedart.com'],
             'binance': ['binance.com'],
-            'metamask': ['metamask.io']
+            'metamask': ['metamask.io'],
+            # Major Indian & Global E-Commerce Marketplaces
+            'flipkart': ['flipkart.com', 'flipkart.net'],
+            'myntra': ['myntra.com'],
+            'meesho': ['meesho.com'],
+            'tatacliq': ['tatacliq.com', 'tata.com'],
+            'nykaa': ['nykaa.com'],
+            'ajio': ['ajio.com', 'reliancedigital.in', 'jiomart.com', 'jio.com'],
+            'zomato': ['zomato.com'],
+            'swiggy': ['swiggy.com'],
+            'blinkit': ['blinkit.com'],
+            'zepto': ['zepto.com', 'zeptonow.com'],
+            'croma': ['croma.com'],
+            'bigbasket': ['bigbasket.com'],
+            'boat': ['boat-lifestyle.com'],
+            'wikipedia': ['wikipedia.org'],
+            'reddit': ['reddit.com'],
+            'twitter': ['twitter.com', 'x.com']
         }
         self.legitimate_domains = [domain for domains in self.legitimate_brand_domains.values() for domain in domains]
         self._live_cache = {}
@@ -380,11 +397,14 @@ class ExternalAnalysisAgent:
         combined_ml_prob = max(url_ml_prob, url_uci_prob)
 
         # If domain is officially legitimate, or is an internal navigation link on the current domain, dampen ML false positives
-        if is_already_official or is_same_domain:
+        if is_already_official:
+            risk_score = 0.0
+            combined_ml_prob = 0.0
+            reasons = [f"Verified official brand domain ({domain})"]
+        elif is_same_domain:
             risk_score = min(risk_score, 0.15)
             combined_ml_prob = min(combined_ml_prob, 0.15)
-            if is_same_domain:
-                reasons.append(f"Internal navigation link on current domain ({domain})")
+            reasons.append(f"Internal navigation link on current domain ({domain})")
         else:
             # Hybrid Logic: Weight the ML models heavily if they have high confidence
             if combined_ml_prob > 0.8:
@@ -444,12 +464,12 @@ class ExternalAnalysisAgent:
                     return 0.95
 
                 ratio = SequenceMatcher(None, tok, legit_stem).ratio()
-                # Only consider typosquats if lengths are close and ratio > 0.70
+                # Only consider typosquats if lengths are close and ratio >= 0.75
                 if tok != legit_stem and len(tok) >= 4 and abs(len(tok) - len(legit_stem)) <= 2:
-                    if ratio > max_similarity:
+                    if ratio >= 0.75 and ratio > max_similarity:
                         max_similarity = ratio
         
-        return max_similarity
+        return max_similarity if max_similarity >= 0.75 else 0.0
 
     
     def extract_domain(self, url):
