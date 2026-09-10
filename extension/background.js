@@ -40,7 +40,9 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
     const anchorText = request.anchorText || "";
     const pageUrl = request.pageUrl || "";
     const normalizedAnchor = anchorText.trim().toLowerCase().slice(0, 40);
-    const cacheKey = `${input}::${normalizedAnchor}`;
+    let pageHost = "unknown";
+    try { if (pageUrl) pageHost = new URL(pageUrl).hostname; } catch(e) {}
+    const cacheKey = `${pageHost}::${input}::${normalizedAnchor}`;
 
     const cachedData = getBoundedCache(cache, cacheKey);
     if (cachedData) {
@@ -55,7 +57,7 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
     })
     .then(response => response.json())
     .then(data => {
-      if (!data.error) setBoundedCache(cache, cacheKey, data);
+      if (!data.error) setBoundedCache(cache, cacheKey, data, 10 * 60 * 1000); // 10 min TTL
       sendResponse(data);
     })
     .catch(error => {
@@ -80,7 +82,7 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
     })
     .then(response => response.json())
     .then(data => {
-      if (!data.error) setBoundedCache(storeTrustCache, url, data, 5 * 60 * 1000); // 5 min TTL
+      if (!data.error) setBoundedCache(storeTrustCache, url, data, 30 * 60 * 1000); // 30 min TTL
       sendResponse(data);
     })
     .catch(error => {

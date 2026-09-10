@@ -416,9 +416,28 @@ function injectStoreTrustBadge() {
     }
 }
 
+function checkAndManageStoreBadge() {
+    if (!isEcommerceSite()) {
+        const existing = document.getElementById('aegis-store-badge');
+        if (existing) existing.remove();
+    } else {
+        injectStoreTrustBadge();
+    }
+}
+
 // Run auto-detector after DOM content settles
 if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', () => setTimeout(injectStoreTrustBadge, 1500));
+    document.addEventListener('DOMContentLoaded', () => setTimeout(checkAndManageStoreBadge, 1500));
 } else {
-    setTimeout(injectStoreTrustBadge, 1500);
+    setTimeout(checkAndManageStoreBadge, 1500);
 }
+
+// SPA URL change listener to dynamically remove/inject badge on client-side routing
+let lastUrl = location.href;
+new MutationObserver(() => {
+    const url = location.href;
+    if (url !== lastUrl) {
+        lastUrl = url;
+        setTimeout(checkAndManageStoreBadge, 1000);
+    }
+}).observe(document, { subtree: true, childList: true });

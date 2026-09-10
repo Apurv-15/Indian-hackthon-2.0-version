@@ -170,8 +170,11 @@ class ExternalAnalysisAgent:
         if not host:
             return {'reachable': False, 'ssl_valid': True, 'final_url': url, 'redirected': False}
 
+        now = time.time()
         if host in self._live_cache:
-            return self._live_cache[host]
+            cached_time, cached_result = self._live_cache[host]
+            if now - cached_time < 900:  # 15 minutes TTL
+                return cached_result
 
         result = {'reachable': False, 'ssl_valid': True, 'final_url': url, 'redirected': False}
 
@@ -193,7 +196,7 @@ class ExternalAnalysisAgent:
                 result['reachable'] = False
 
 
-        self._live_cache[host] = result
+        self._live_cache[host] = (now, result)
         return result
 
 
