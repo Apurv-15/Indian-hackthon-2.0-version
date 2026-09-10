@@ -46,7 +46,7 @@ function updateTooltip(x, y, data) {
         <span style="color: ${RISK_COLORS[data.riskLevel] || '#fff'}; font-size: 11px; padding: 2px 6px; border-radius: 4px; background: rgba(0,0,0,0.3);">${data.riskLevel} Risk</span>
       </div>
       <div><strong>Verdict:</strong> ${data.threatType || 'Unknown'}</div>
-      <div><strong>Confidence:</strong> ${data.confidenceScore}%</div>
+      <div><strong>User Trust Score:</strong> ${data.confidenceScore}%</div>
       <div style="margin-top: 6px; font-size: 11px; color: #ccc;">${data.explanation}</div>
     `;
     tooltip.style.borderTop = `3px solid ${RISK_COLORS[data.riskLevel] || 'transparent'}`;
@@ -62,7 +62,7 @@ document.addEventListener("click", (e) => {
     if (target && target.dataset.aegisResult) {
         const data = JSON.parse(target.dataset.aegisResult);
         if (data.riskLevel === "High" || data.riskLevel === "Critical") {
-            const proceed = confirm(`🚨 AegisAI WARNING 🚨\n\nThis link appears to be a ${data.riskLevel.toUpperCase()} RISK phishing threat.\n\nType: ${data.threatType}\nConfidence: ${data.confidenceScore}%\n\nReason: ${data.explanation}\n\nAre you sure you want to proceed?`);
+            const proceed = confirm(`🚨 AegisAI WARNING 🚨\n\nThis link appears to be a ${data.riskLevel.toUpperCase()} RISK phishing threat.\n\nType: ${data.threatType}\nUser Trust Score: ${data.confidenceScore}%\n\nReason: ${data.explanation}\n\nAre you sure you want to proceed?`);
             if (!proceed) {
                 e.preventDefault();
                 e.stopPropagation();
@@ -206,20 +206,32 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
 // E-COMMERCE STORE TRUST AUTO-DETECTION & FLOATING SHIELD
 // ==========================================
 function isEcommerceSite() {
-    const pageHtml = document.documentElement.innerHTML.toLowerCase();
-    const hasCart = !!document.querySelector('[id*="cart"], [class*="cart"], a[href*="cart"], button[name*="add-to-cart"]');
-    const hasCheckout = !!document.querySelector('[id*="checkout"], [class*="checkout"], a[href*="checkout"]');
-    const hasShopify = pageHtml.includes('cdn.shopify.com') || pageHtml.includes('shopify-features');
-    const hasWoo = pageHtml.includes('woocommerce') || pageHtml.includes('wp-content/plugins/woocommerce');
-    const hasPrice = pageHtml.includes('₹') || pageHtml.includes('rs.') || pageHtml.includes('inr');
+    const host = window.location.hostname.toLowerCase();
     
-    // Ignore search engines and social platforms
-    const host = window.location.hostname;
-    if (host.includes('google.') || host.includes('bing.') || host.includes('youtube.') || host.includes('facebook.') || host.includes('instagram.')) {
+    // 1. Ignore search engines, social platforms, news, and encyclopedia domains
+    const nonStoreDomains = [
+        'google.', 'bing.', 'youtube.', 'facebook.', 'instagram.', 'twitter.', 'x.com',
+        'reddit.com', 'wikipedia.org', 'medium.com', 'quora.com', 'stackoverlow.com',
+        'nytimes.com', 'indianexpress.com', 'timesofindia', 'ndtv.com', 'thehindu.com',
+        'news18.com', 'bbc.com', 'cnn.com', 'hindustantimes.com'
+    ];
+    if (nonStoreDomains.some(domain => host.includes(domain))) {
         return false;
     }
 
-    return (hasShopify || hasWoo || (hasCart && hasCheckout));
+    const pageHtml = document.documentElement.innerHTML.toLowerCase();
+    const hasShopify = pageHtml.includes('cdn.shopify.com') || pageHtml.includes('shopify-features');
+    const hasWoo = pageHtml.includes('woocommerce') || pageHtml.includes('wp-content/plugins/woocommerce');
+    if (hasShopify || hasWoo) return true;
+
+    // 2. High-precision E-Commerce UI Signals (Cart, Buy Now, Variant Selectors)
+    const hasCart = !!document.querySelector('[id*="cart"], [class*="cart"], a[href*="cart"], button[name*="add-to-cart"], [class*="add-to-cart"], [id*="add-to-cart"], [class*="shopping-bag"], [class*="bag-icon"]');
+    const hasBuyNow = !!document.querySelector('[id*="buy"], [class*="buy"], [id*="checkout"], [class*="checkout"], a[href*="checkout"], button[name*="buy"]');
+    const hasVariants = !!document.querySelector('[class*="variant"], [id*="variant"], [class*="color-select"], [class*="size-select"]');
+    const hasPrice = pageHtml.includes('₹') || pageHtml.includes('rs.') || pageHtml.includes('inr') || pageHtml.includes('$');
+
+    // Store criteria: (Cart OR Buy Now) AND (Price OR Variants OR Checkout)
+    return (hasCart || hasBuyNow) && (hasPrice || hasVariants);
 }
 
 function injectStoreTrustBadge() {
@@ -245,7 +257,11 @@ function injectStoreTrustBadge() {
                 scoreColor = '#6366f1';
                 shieldIcon = '📦';
                 badgeTitle = 'AegisAI Replica Verification';
-            } else if (data.trust_level === 'NO_SIGNALS' || data.trust_level === 'UNKNOWN') {
+            } else if (data.trust_level === 'UNREVIEWED_NEUTRAL' || data.trust_level === 'UNKNOWN') {
+                scoreColor = '#94a3b8';
+                shieldIcon = 'ℹ️';
+                badgeTitle = 'AegisAI Store Info (Unreviewed)';
+            } else if (data.trust_level === 'NO_SIGNALS' || data.trust_score < 0.25) {
                 scoreColor = '#ff4d4d';
                 shieldIcon = '🚨';
             } else if (data.trust_level === 'FEW_SIGNALS' || data.trust_level === 'SOME_SIGNALS') {

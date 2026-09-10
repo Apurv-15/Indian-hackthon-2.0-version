@@ -991,6 +991,9 @@ class StoreTrustAgent:
             trust_level = "SOME_SIGNALS"
         elif final_trust_score >= 0.30:
             trust_level = "FEW_SIGNALS"
+        elif review_data['sentiment'] == 'UNKNOWN' and signals['ssl_valid'] and not fraud_signals['suspicious_pricing']:
+            trust_level = "UNREVIEWED_NEUTRAL"
+            final_trust_score = max(0.50, round(final_trust_score, 2))
         else:
             trust_level = "NO_SIGNALS"
 

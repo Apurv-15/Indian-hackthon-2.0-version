@@ -44,6 +44,8 @@ from difflib import SequenceMatcher
 import os
 import pickle
 import requests
+import time
+import socket
 
 class ExternalAnalysisAgent:
     def __init__(self):
@@ -115,6 +117,11 @@ class ExternalAnalysisAgent:
             'kotak': ['kotak.com'],
             'paytm': ['paytm.com'],
             'phonepe': ['phonepe.com'],
+            # Payment Gateways & Infrastructure
+            'razorpay': ['razorpay.com', 'razorpay.in', 'rzp.io'],
+            'cashfree': ['cashfree.com'],
+            'payu': ['payu.in', 'payu.com'],
+            'stripe': ['stripe.com'],
             # Indian Government & Public Utilities
             'indiapost': ['indiapost.gov.in'],
             'incometax': ['incometax.gov.in', 'incometaxindiaefiling.gov.in'],

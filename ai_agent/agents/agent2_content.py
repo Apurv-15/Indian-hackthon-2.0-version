@@ -208,38 +208,48 @@ class ContentAnalysisAgent:
             # Extract domain parts
             domain = url_lower.replace('http://', '').replace('https://', '').replace('www.', '').split('/')[0]
 
-            # Heuristic: If email/anchor text mentions a brand, but the URL is not the official domain of that brand
-            brands = {
-                'paypal': 'paypal.com',
-                'google': 'google.com',
-                'microsoft': 'microsoft.com',
-                'amazon': 'amazon.com',
-                'apple': 'apple.com',
-                'netflix': 'netflix.com',
-                'sbi': 'sbi.co.in',
-                'hdfc': 'hdfcbank.com',
-                'icici': 'icicibank.com',
-                'axis': 'axisbank.com',
-                'kotak': 'kotak.com',
-                'paytm': 'paytm.com',
-                'phonepe': 'phonepe.com',
-                'indiapost': 'indiapost.gov.in',
-                'shiprocket': 'shiprocket.in',
-                'bluedart': 'bluedart.com',
-                'binance': 'binance.com',
-                'metamask': 'metamask.io'
+            # Domain family aliases (brand -> tuple of recognized official domains)
+            brand_families = {
+                'google': ('google.com', 'google.co.in', 'google.de', 'google.org', 'youtube.com', 'gmail.com', 'googlevideo.com'),
+                'microsoft': ('microsoft.com', 'live.com', 'office.com', 'outlook.com', 'msn.com'),
+                'amazon': ('amazon.com', 'amazon.in', 'amazon.co.uk', 'amazon.de', 'media-amazon.com', 'ssl-images-amazon.com'),
+                'apple': ('apple.com', 'icloud.com', 'apple-dns.net'),
+                'sbi': ('sbi.co.in', 'onlinesbi.sbi', 'onlinesbi.com', 'sbi'),
+                'hdfc': ('hdfcbank.com', 'hdfc.com'),
+                'icici': ('icicibank.com', 'icicidirect.com'),
+                'axis': ('axisbank.com', 'axisbank.co.in'),
+                'kotak': ('kotak.com', 'kotakmahindra.com'),
+                'paytm': ('paytm.com', 'paytmbank.com'),
+                'phonepe': ('phonepe.com', 'phonepe.in'),
+                'shiprocket': ('shiprocket.in', 'shiprocket.com'),
+                'bluedart': ('bluedart.com', 'bluedart.in'),
+                'binance': ('binance.com', 'binance.org'),
+                'metamask': ('metamask.io', 'metamask.app')
+            }
+
+            # Known trusted merchants/marketplaces that sell multi-brand products
+            trusted_merchants = {
+                'amazon.com', 'amazon.in', 'flipkart.com', 'myntra.com', 'meesho.com',
+                'nykaa.com', 'ajio.com', 'jiomart.com', 'tatacliq.com', 'mrktrends.in',
+                'croma.com', 'reliancedigital.in', 'bigbasket.com', 'blinkit.com', 'zepto.com'
             }
 
             score = 1.0
-            for brand, official in brands.items():
+            for brand, officials in brand_families.items():
                 if brand in text_lower:
-                    # Brand is mentioned in text. Does the URL point to a domain containing the brand, but not the official one?
-                    if brand in domain and official not in domain:
-                        # High divergence (brand impersonation)
-                        score = min(score, 0.1)
-                    elif official not in domain and domain != official:
-                        # Moderate divergence (URL doesn't match the brand mentioned)
-                        score = min(score, 0.3)
+                    # Check if domain belongs to official brand family
+                    is_official_domain = any(domain == off or domain.endswith('.' + off) for off in officials)
+                    
+                    if not is_official_domain:
+                        # Case 1: Brand name in domain (e.g. paypa1-login.com or google-verify.xyz) -> Typosquatting / Impersonation
+                        if brand in domain:
+                            score = min(score, 0.1)
+                        # Case 2: Mentioning brand product on a recognized merchant -> Legitimate product link (no penalty)
+                        elif any(domain == merch or domain.endswith('.' + merch) for merch in trusted_merchants):
+                            pass  # Keep score 1.0
+                        # Case 3: Link text explicitly states "Login to Brand" / "Verify Brand" but link goes elsewhere -> Divergence
+                        elif any(action in text_lower for action in ['login', 'sign in', 'verify account', 'security update', 'bank']):
+                            score = min(score, 0.3)
 
             connection_scores.append(score)
 
