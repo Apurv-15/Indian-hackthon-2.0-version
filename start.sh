@@ -33,6 +33,10 @@ sleep 1
 echo "🚀 Launching AI Inference Engine..."
 export HF_HUB_OFFLINE=1
 export TRANSFORMERS_OFFLINE=1
+export PYTORCH_ENABLE_MPS_FALLBACK=1
+export PYTORCH_MPS_HIGH_WATERMARK_RATIO=0.0
+export CUDA_VISIBLE_DEVICES=""
+export PYTORCH_DISABLE_MPS=1
 cd "$PROJECT_ROOT/ai_agent"
 
 if [ -f "$GUNICORN_EXECUTABLE" ]; then

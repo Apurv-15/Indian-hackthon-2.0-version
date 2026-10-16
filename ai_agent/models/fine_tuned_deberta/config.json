@@ -3,9 +3,7 @@
     "DebertaV2ForSequenceClassification"
   ],
   "attention_probs_dropout_prob": 0.1,
-  "bos_token_id": null,
-  "dtype": "float16",
-  "eos_token_id": null,
+  "dtype": "float32",
   "hidden_act": "gelu",
   "hidden_dropout_prob": 0.1,
   "hidden_size": 768,
@@ -20,7 +18,7 @@
   "num_attention_heads": 12,
   "num_hidden_layers": 6,
   "pad_token_id": 0,
-  "pooler_dropout": 0.0,
+  "pooler_dropout": 0,
   "pooler_hidden_act": "gelu",
   "pooler_hidden_size": 768,
   "pos_att_type": [
@@ -31,9 +29,7 @@
   "position_buckets": 256,
   "relative_attention": true,
   "share_att_key": true,
-  "tie_word_embeddings": true,
-  "transformers_version": "5.6.2",
+  "transformers_version": "4.57.6",
   "type_vocab_size": 0,
-  "use_cache": false,
   "vocab_size": 128100
 }

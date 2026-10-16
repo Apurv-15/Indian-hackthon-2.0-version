@@ -315,29 +315,55 @@ class SynthesizerAgent:
         )
         
         # Confidence: Dynamically reflects certainty in the verdict
-        # Tier-based formula based on distance from threshold boundaries
-        if risk_score <= 0.15:
-            confidence = 0.97
-        elif risk_score < self.thresholds['low']:  # < 0.22
-            confidence = 0.90
-        elif risk_score < self.thresholds['medium']:  # < 0.50
-            margin = (self.thresholds['medium'] - risk_score) / (self.thresholds['medium'] - self.thresholds['low'])
-            confidence = 0.60 + margin * 0.25
-        elif risk_score < self.thresholds['high']:  # < 0.80
-            margin = (risk_score - self.thresholds['medium']) / (self.thresholds['high'] - self.thresholds['medium'])
-            confidence = 0.65 + margin * 0.20
-        elif risk_score < self.thresholds['critical']:  # < 0.95
-            margin = (risk_score - self.thresholds['high']) / (self.thresholds['critical'] - self.thresholds['high'])
-            confidence = 0.80 + margin * 0.15
-        else:
-            confidence = 0.97
+        # Grounded in model agreement, domain verification, and signal completeness.
+        # Avoid static blanket percentages (e.g. static 0.97).
+        a1_factors = agent1_results.get('risk_factors', [])
+        a1_ml_risk = self._safe_float(agent1_results.get('url_ml_risk'))
+        a1_url_risk = self._safe_float(agent1_results.get('url_risk'))
+        a2_phish = self._safe_float(agent2_results.get('phishing_probability'))
+        a4_conf = self._safe_float(agent4_results.get('confidence'))
 
+        is_verified_official = any("verified official" in str(f).lower() for f in a1_factors)
+        is_internal_nav = any("internal navigation" in str(f).lower() for f in a1_factors)
+
+        # Baseline variance between models (consensus)
+        model_scores = [a1_ml_risk, a1_url_risk, a2_phish]
+        if a4_conf > 0:
+            model_scores.append(a4_conf)
+        score_spread = max(model_scores) - min(model_scores) if model_scores else 0.0
+
+        if risk_level == "MINIMAL":
+            if is_verified_official:
+                # Highly confident for recognized brand domains (96% - 99%)
+                confidence = 0.96 + min(0.03, (0.15 - risk_score) * 0.2)
+            elif is_internal_nav:
+                confidence = 0.92 + min(0.05, (0.15 - risk_score) * 0.3)
+            else:
+                # Unknown / normal unflagged domains: genuine confidence based on model consensus
+                # Higher consensus (lower spread) -> higher confidence, typically 78% - 92%
+                consensus_factor = max(0.0, 1.0 - score_spread * 1.5)
+                confidence = 0.76 + (0.16 * consensus_factor)
+        elif risk_level == "LOW":
+            confidence = 0.72 + (0.15 * max(0.0, 1.0 - score_spread))
+        elif risk_level in ("HIGH", "CRITICAL"):
+            # Strong indicator presence boosts threat detection confidence
+            high_signal_count = sum(1 for s in (a1_ml_risk, a1_url_risk, a2_phish, a4_conf) if s > 0.6)
+            confidence = 0.82 + min(0.16, 0.05 * high_signal_count + (risk_score - 0.7) * 0.3)
+        else:  # MEDIUM
+            # Moderate ambiguity
+            margin = abs(risk_score - self.thresholds['medium'])
+            confidence = 0.65 + (margin * 0.5)
+
+        # Compute dedicated safety score (0.0 - 100.0%)
+        # Inverts risk score and scales to a human-readable safety percentage
+        safety_score = max(0.0, min(100.0, (1.0 - risk_score) * 100.0))
         
         result = {
             'threat_types': threat_types,
             'risk_level': risk_level,
             'risk_score': risk_score,
-            'confidence': min(confidence, 1.0),
+            'confidence': round(min(max(confidence, 0.50), 0.99), 4),
+            'safety_score': round(safety_score, 1),
             'explanation': explanation,
             'detailed_results': {
                 'agent1': agent1_results,

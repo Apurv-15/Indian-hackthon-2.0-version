@@ -74,9 +74,23 @@ class ContentAnalysisAgent:
             self.has_text_ml = True
             print("Successfully loaded text ML models.")
 
+            # Load short anchor text model if available
+            anchor_model_path = os.path.join(model_dir, 'anchor_model.pkl')
+            anchor_vec_path = os.path.join(model_dir, 'anchor_vectorizer.pkl')
+            if os.path.exists(anchor_model_path) and os.path.exists(anchor_vec_path):
+                with open(anchor_model_path, 'rb') as f:
+                    self.anchor_model = pickle.load(f)
+                with open(anchor_vec_path, 'rb') as f:
+                    self.anchor_vectorizer = pickle.load(f)
+                self.has_anchor_ml = True
+                print("Successfully loaded short anchor-text ML model.")
+            else:
+                self.has_anchor_ml = False
+
         except Exception as e:
             print(f"Failed to load text ML models: {e}")
             self.has_text_ml = False
+            self.has_anchor_ml = False
 
         self.phishing_keywords = [
             'verify', 'account', 'bank', 'login', 'password', 'credit card',
@@ -193,70 +207,119 @@ class ContentAnalysisAgent:
             print(f"Transformer error: {e}")
             return None
 
-    def analyze_connection(self, text, urls):
+    def analyze_connection(self, text, urls, page_url=''):
         """
-        Analyze connection between email text and URLs.
-        Heuristics-based to prevent PyTorch deadlocks on Windows CPU.
+        Analyze connection between text/anchor text and target URLs.
+        Detects malicious link label deception without false positives on legitimate discussions.
         """
         if not urls:
             return 1.0, "No URLs to analyze"
 
-        text_lower = text.lower()
+        text_lower = text.lower().strip()
+        page_url_lower = page_url.lower().strip() if page_url else ''
+
+        # Check if the browsing context is a known search engine
+        is_search_page = any(se in page_url_lower for se in ['google.', 'bing.', 'duckduckgo.', 'yahoo.', 'ecosia.'])
+
+        # Recognized official brand domain families
+        brand_families = {
+            'google': ('google.com', 'google.co.in', 'google.de', 'google.org', 'youtube.com', 'gmail.com', 'googlevideo.com'),
+            'microsoft': ('microsoft.com', 'live.com', 'office.com', 'outlook.com', 'msn.com', 'bing.com'),
+            'amazon': ('amazon.com', 'amazon.in', 'amazon.co.uk', 'amazon.de', 'media-amazon.com', 'ssl-images-amazon.com'),
+            'paypal': ('paypal.com', 'paypal.in', 'paypal.me'),
+            'apple': ('apple.com', 'icloud.com', 'apple-dns.net'),
+            'netflix': ('netflix.com',),
+            'sbi': ('sbi.co.in', 'onlinesbi.sbi', 'onlinesbi.com', 'sbi'),
+            'hdfc': ('hdfcbank.com', 'hdfc.com'),
+            'icici': ('icicibank.com', 'icicidirect.com'),
+            'axis': ('axisbank.com', 'axisbank.co.in'),
+            'kotak': ('kotak.com', 'kotakmahindra.com'),
+            'paytm': ('paytm.com', 'paytmbank.com'),
+            'phonepe': ('phonepe.com', 'phonepe.in'),
+            'shiprocket': ('shiprocket.in', 'shiprocket.com'),
+            'bluedart': ('bluedart.com', 'bluedart.in'),
+            'binance': ('binance.com', 'binance.org'),
+            'metamask': ('metamask.io', 'metamask.app')
+        }
+
+        # Multi-brand merchants, marketplaces, news, community, and search platforms
+        trusted_platforms = {
+            # Search & Tech Platforms
+            'google.com', 'google.co.in', 'bing.com', 'duckduckgo.com', 'yahoo.com',
+            'wikipedia.org', 'quora.com', 'reddit.com', 'stackoverflow.com', 'medium.com',
+            'youtube.com', 'twitter.com', 'x.com', 'linkedin.com', 'github.com',
+            'theverge.com', 'cnet.com', 'techcrunch.com', 'gsmarena.com', 'nytimes.com',
+            'bbc.com', 'cnn.com', 'thehindu.com', 'timesofindia.indiatimes.com', 'ndtv.com',
+            # Trusted E-commerce Merchants
+            'amazon.com', 'amazon.in', 'flipkart.com', 'myntra.com', 'meesho.com',
+            'nykaa.com', 'ajio.com', 'jiomart.com', 'tatacliq.com', 'mrktrends.in',
+            'croma.com', 'reliancedigital.in', 'bigbasket.com', 'blinkit.com', 'zepto.com',
+            'boat-lifestyle.com'
+        }
+
+        # High-risk action verbs and credential theft keywords
+        action_intent_keywords = [
+            'login', 'log in', 'signin', 'sign in', 'verify', 'verification',
+            'account', 'security', 'settings', 'suspended', 'reactivate',
+            'reset password', 'password', 'confirm identity', 'kyc', 'banking',
+            'bank', 'authenticate', 'wallet', 'claim', 'validate', 'access', 'update'
+        ]
+
         connection_scores = []
         for url in urls:
             url_lower = url.lower()
             # Extract domain parts
             domain = url_lower.replace('http://', '').replace('https://', '').replace('www.', '').split('/')[0]
 
-            # Domain family aliases (brand -> tuple of recognized official domains)
-            brand_families = {
-                'google': ('google.com', 'google.co.in', 'google.de', 'google.org', 'youtube.com', 'gmail.com', 'googlevideo.com'),
-                'microsoft': ('microsoft.com', 'live.com', 'office.com', 'outlook.com', 'msn.com'),
-                'amazon': ('amazon.com', 'amazon.in', 'amazon.co.uk', 'amazon.de', 'media-amazon.com', 'ssl-images-amazon.com'),
-                'apple': ('apple.com', 'icloud.com', 'apple-dns.net'),
-                'sbi': ('sbi.co.in', 'onlinesbi.sbi', 'onlinesbi.com', 'sbi'),
-                'hdfc': ('hdfcbank.com', 'hdfc.com'),
-                'icici': ('icicibank.com', 'icicidirect.com'),
-                'axis': ('axisbank.com', 'axisbank.co.in'),
-                'kotak': ('kotak.com', 'kotakmahindra.com'),
-                'paytm': ('paytm.com', 'paytmbank.com'),
-                'phonepe': ('phonepe.com', 'phonepe.in'),
-                'shiprocket': ('shiprocket.in', 'shiprocket.com'),
-                'bluedart': ('bluedart.com', 'bluedart.in'),
-                'binance': ('binance.com', 'binance.org'),
-                'metamask': ('metamask.io', 'metamask.app')
-            }
-
-            # Known trusted merchants/marketplaces that sell multi-brand products
-            trusted_merchants = {
-                'amazon.com', 'amazon.in', 'flipkart.com', 'myntra.com', 'meesho.com',
-                'nykaa.com', 'ajio.com', 'jiomart.com', 'tatacliq.com', 'mrktrends.in',
-                'croma.com', 'reliancedigital.in', 'bigbasket.com', 'blinkit.com', 'zepto.com'
-            }
-
             score = 1.0
+
+            # If user is on a search engine page and the destination is an internal search token or result wrapper (like google.com/goto)
+            if is_search_page and ('/goto' in url_lower or '/search' in url_lower or '/url' in url_lower):
+                connection_scores.append(1.0)
+                continue
+
+            # Check if domain itself is in trusted platforms
+            is_trusted_platform = any(domain == p or domain.endswith('.' + p) for p in trusted_platforms)
+
             for brand, officials in brand_families.items():
-                if brand in text_lower:
-                    # Check if domain belongs to official brand family
-                    is_official_domain = any(domain == off or domain.endswith('.' + off) for off in officials)
-                    
-                    if not is_official_domain:
-                        # Case 1: Brand name in domain (e.g. paypa1-login.com or google-verify.xyz) -> Typosquatting / Impersonation
-                        if brand in domain:
-                            score = min(score, 0.1)
-                        # Case 2: Mentioning brand product on a recognized merchant -> Legitimate product link (no penalty)
-                        elif any(domain == merch or domain.endswith('.' + merch) for merch in trusted_merchants):
-                            pass  # Keep score 1.0
-                        # Case 3: Link text explicitly states "Login to Brand" / "Verify Brand" but link goes elsewhere -> Divergence
-                        elif any(action in text_lower for action in ['login', 'sign in', 'verify account', 'security update', 'bank']):
-                            score = min(score, 0.3)
+                brand_in_text = bool(re.search(r'\b' + brand + r'\b', text_lower))
+                if not brand_in_text:
+                    continue
+
+                is_official_domain = any(domain == off or domain.endswith('.' + off) for off in officials)
+
+                if not is_official_domain:
+                    # Case 1: Brand name appears in destination domain (e.g. paypa1-update.com, apple-verify.xyz)
+                    # Typosquatting / Impersonation
+                    if brand in domain:
+                        score = min(score, 0.1)
+
+                    # Case 2: On a search engine page or trusted merchant/news/knowledge platform
+                    elif is_search_page or is_trusted_platform:
+                        # Legitimate reference, review, article, or search result
+                        pass
+
+                    # Case 3: Anchor text looks like a URL for the brand (e.g. "www.paypal.com" or "paypal.com/login")
+                    # but leads to a totally different third-party site
+                    elif any(off in text_lower for off in officials) or f"{brand}.com" in text_lower:
+                        score = min(score, 0.15)
+
+                    # Case 4: Anchor text contains explicit credential/security/account call-to-action
+                    # (e.g. "Click here to login to your PayPal account") pointing to unverified domain
+                    elif any(action in text_lower for action in action_intent_keywords):
+                        score = min(score, 0.20)
+
+                    # Case 5: Ordinary discussion or product query mentioning brand without phishing intent
+                    else:
+                        # Benign reference to a brand (e.g. "AirPods Max deals", "About Apple")
+                        score = min(score, 0.90)
 
             connection_scores.append(score)
 
-        avg_score = sum(connection_scores) / len(connection_scores)
-        if avg_score < 0.2:
+        avg_score = sum(connection_scores) / len(connection_scores) if connection_scores else 1.0
+        if avg_score < 0.25:
             return avg_score, "High divergence: Link text mentions a brand but destination points elsewhere"
-        elif avg_score < 0.5:
+        elif avg_score < 0.60:
             return avg_score, "Moderate divergence: Link text and destination domain seem loosely related"
         else:
             return avg_score, "Stable: Link destination matches context"
@@ -266,6 +329,7 @@ class ContentAnalysisAgent:
         text = input_data['cleaned_text']
         urls = input_data['urls']
         anchor_text = input_data.get('anchor_text', '').strip()
+        page_url = input_data.get('page_url', '').strip()
 
         # Check if the input is a raw URL
         is_raw_url = False
@@ -298,7 +362,7 @@ class ContentAnalysisAgent:
                 'reliancedigital.in', 'jiomart.com', 'jio.com', 'zomato.com',
                 'swiggy.com', 'blinkit.com', 'zepto.com', 'zeptonow.com',
                 'croma.com', 'bigbasket.com', 'boat-lifestyle.com',
-                'wikipedia.org', 'reddit.com', 'twitter.com', 'x.com'
+                'wikipedia.org', 'reddit.com', 'twitter.com', 'x.com', 'quora.com'
             }
             is_official = any(parsed_host == h or parsed_host.endswith('.' + h) for h in legit_hosts)
 
@@ -317,10 +381,10 @@ class ContentAnalysisAgent:
             connection_msg = "Raw URL — content analysis limited to URL structure"
             divergence_boost = 0.0
             if anchor_text:
-                connection_score, connection_msg = self.analyze_connection(anchor_text, [text_stripped])
-                if connection_score < 0.2:
+                connection_score, connection_msg = self.analyze_connection(anchor_text, [text_stripped], page_url=page_url)
+                if connection_score < 0.25:
                     divergence_boost = 0.55
-                elif connection_score < 0.5:
+                elif connection_score < 0.50:
                     divergence_boost = 0.30
             
             combined_phish = min(max(url_phishing_score, spam_ml_prob * 0.5) + divergence_boost, 1.0)
@@ -389,7 +453,7 @@ class ContentAnalysisAgent:
             transformer_score = 0.0
 
         # Connection Analysis
-        connection_score, connection_msg = self.analyze_connection(text, urls)
+        connection_score, connection_msg = self.analyze_connection(text, urls, page_url=page_url)
 
         # Adjust combined phishing score based on connection divergence
         # If divergence is high (low connection), we increase the phishing probability

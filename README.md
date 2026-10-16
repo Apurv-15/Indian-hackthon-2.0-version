@@ -57,6 +57,20 @@ User Input / Link / Storefront
 
 ---
 
+## 📚 Complete Project Documentation & Deep Dives
+
+For in-depth technical references, architecture diagrams, and algorithm specifications, check out our comprehensive guide suite:
+
+| Document | Description |
+| :--- | :--- |
+| ⚡ [**QUICK_REFERENCE.md**](QUICK_REFERENCE.md) | **Review Cheat Sheet**: System overview, 4-agent summary, risk formula & quick troubleshooting. |
+| 🏗️ [**ARCHITECTURE.md**](ARCHITECTURE.md) | **System Architecture**: High-level topology, agent communication flow, input processing pipeline. |
+| 🧠 [**ALGORITHM_REFERENCE.md**](ALGORITHM_REFERENCE.md) | **ML Algorithm Deep Dive**: MNB, SVM, DeBERTa, DistilBERT, MiniLM embeddings, TF-IDF, and ensemble formulas. |
+| 📊 [**DATA_FLOW_DIAGRAM.md**](DATA_FLOW_DIAGRAM.md) | **Data Flow & ASCII Traces**: Step-by-step visual decision trees per agent and timeline analysis. |
+| 🤝 [**AGENT_COMMUNICATION_PATTERNS.md**](AGENT_COMMUNICATION_PATTERNS.md) | **Agent Contracts & Protocols**: Data contracts, error handling, parallel execution, and consensus strategies. |
+
+---
+
 ## 🔥 Zero-Cost Firecrawl Alternative (`curl_cffi` Engine)
 
 Rather than paying for expensive Firecrawl / Scraper API subscriptions, AegisAI features a **100% Free & Open-Source Review Extraction Engine** powered by **`curl_cffi`** (Browser TLS Impersonation).

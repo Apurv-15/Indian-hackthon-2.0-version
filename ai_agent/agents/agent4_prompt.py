@@ -12,13 +12,14 @@ class PromptInjectionAgent:
     Detects prompt injection and jailbreak attempts in user inputs.
     Combines a transformer model (trained on MNLI) with heuristic rules.
     """
-    def __init__(self, model_name="mrm8488/deberta-v3-small-finetuned-mnli", threshold=0.6):
+    def __init__(self, model_name="mrm8488/deberta-v3-small-finetuned-mnli", threshold=0.3, use_transformer=False):
         """
         Args:
             model_name: Hugging Face model identifier for a DeBERTa MNLI model.
             threshold: Confidence threshold above which input is flagged as injection.
+            use_transformer: Whether to load the DeBERTa transformer model.
         """
-        print("Loading Prompt Injection Agent (MNLI-based)...")
+        print("Loading Prompt Injection Agent...")
         self.threshold = threshold
 
         # Detection of Device
@@ -30,11 +31,21 @@ class PromptInjectionAgent:
             self.device = torch.device("cpu")
             print("🛡️ Running Prompt Injection Agent on CPU.")
 
-        # Bypassing the transformer model to avoid Windows CPU deadlocks.
-        # We will rely entirely on the rule-based regex patterns.
-        self.tokenizer = None
-        self.model = None
-        print("✓ Rule-based engine loaded (Transformer bypassed for stability)")
+        if use_transformer:
+            try:
+                print(f"Loading DeBERTa transformer model ({model_name})...")
+                self.tokenizer = AutoTokenizer.from_pretrained(model_name)
+                self.model = AutoModelForSequenceClassification.from_pretrained(model_name).to(self.device)
+                self.model.eval()
+                print("✓ DeBERTa transformer model loaded successfully.")
+            except Exception as e:
+                print(f"Failed to load transformer model: {e}")
+                self.tokenizer = None
+                self.model = None
+        else:
+            self.tokenizer = None
+            self.model = None
+            print("✓ Rule-based engine loaded (Transformer bypassed for stability)")
 
         # Rule‑based patterns (covers common jailbreak attempts)
         self.injection_patterns = [
@@ -106,9 +117,12 @@ class PromptInjectionAgent:
             contradiction_prob = 0.0
 
         # -------------------- Combine scores --------------------
-        # 70% weight on contradiction probability, 30% on rule‑based
-        combined_risk = 0.7 * contradiction_prob + 0.3 * min(rule_score, 1.0)
-        detected = combined_risk > self.threshold
+        if self.model is not None and self.tokenizer is not None:
+            combined_risk = 0.7 * contradiction_prob + 0.3 * min(rule_score, 1.0)
+        else:
+            combined_risk = min(rule_score, 1.0)
+
+        detected = combined_risk >= self.threshold
 
         # -------------------- Build explanation --------------------
         explanation = []

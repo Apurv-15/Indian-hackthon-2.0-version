@@ -7,6 +7,10 @@ import os, sys, warnings, logging
 os.environ["TOKENIZERS_PARALLELISM"] = "false"
 os.environ["OMP_NUM_THREADS"] = "1"
 os.environ["MKL_NUM_THREADS"] = "1"
+os.environ["PYTORCH_ENABLE_MPS_FALLBACK"] = "1"
+os.environ["PYTORCH_MPS_HIGH_WATERMARK_RATIO"] = "0.0"
+os.environ["CUDA_VISIBLE_DEVICES"] = ""
+os.environ["PYTORCH_DISABLE_MPS"] = "1"
 warnings.filterwarnings("ignore")
 
 import io
@@ -27,7 +31,7 @@ CORS(app, resources={r"/*": {"origins": ["http://localhost:*", "http://127.0.0.1
 store_trust_agent = StoreTrustAgent()
 executor = ThreadPoolExecutor(max_workers=4)
 
-REQUEST_TIMEOUT_SECONDS = 10.0
+REQUEST_TIMEOUT_SECONDS = 25.0
 
 
 @app.route("/health", methods=["GET"])
@@ -60,6 +64,7 @@ def analyze():
             "riskLevel": risk_level,
             "threatType": ", ".join(result["threat_types"]),
             "confidenceScore": round(result["confidence"] * 100, 1),
+            "safetyScore": result.get("safety_score", round((1.0 - result["risk_score"]) * 100, 1)),
             "riskScore": round(result["risk_score"], 4),
             "explanation": " ".join([r.split(" — helper:")[0] for r in result["explanation"]["reasons"]]),
             "indicators": result["explanation"]["reasons"],

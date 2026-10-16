@@ -559,8 +559,13 @@ class StoreTrustAgent:
         # Determine sentiment — prefer hard rating data over text heuristics
         # -----------------------------------------------------------------------
         # Use Trustpilot star rating if available (most reliable signal)
-        effective_rating = tp_rating['rating_value'] if tp_rating else store_rating
+        effective_rating_raw = tp_rating['rating_value'] if tp_rating else store_rating
         tp_review_count = tp_rating['review_count'] if tp_rating else 0
+
+        try:
+            effective_rating = float(effective_rating_raw) if effective_rating_raw is not None else None
+        except (ValueError, TypeError):
+            effective_rating = None
 
         if effective_rating is not None:
             if effective_rating >= 4.0:
@@ -656,14 +661,36 @@ class StoreTrustAgent:
         }
 
     TRUSTED_PLATFORMS = {
+        # Global Enterprise Marketplaces
+        'aliexpress.com': 'Alibaba Group (AliExpress Global Marketplace)',
+        'alibaba.com': 'Alibaba Global B2B Marketplace',
         'amazon.in': 'Amazon India Official Marketplace',
         'amazon.com': 'Amazon Global Official Marketplace',
+        'ebay.com': 'eBay Global Marketplace',
+        'walmart.com': 'Walmart Enterprise Marketplace',
+        'target.com': 'Target Enterprise Retail',
+        'etsy.com': 'Etsy Global Marketplace',
+        'bestbuy.com': 'Best Buy Enterprise Retail',
+        # Major Global Brand Direct Stores
+        'apple.com': 'Apple Official Store',
+        'samsung.com': 'Samsung Official Store',
+        'nike.com': 'Nike Official Store',
+        'adidas.com': 'Adidas Official Store',
+        'adidas.co.in': 'Adidas India Official Store',
+        # Indian Enterprise Retail & Marketplaces
         'flipkart.com': 'Flipkart Official Marketplace',
         'myntra.com': 'Myntra Fashion Marketplace',
         'ajio.com': 'Reliance Ajio Marketplace',
         'tatacliq.com': 'Tata CLiQ Marketplace',
         'nykaa.com': 'Nykaa Beauty Marketplace',
-        'meesho.com': 'Meesho Marketplace'
+        'meesho.com': 'Meesho Marketplace',
+        'croma.com': 'Tata Croma Official Electronics',
+        'reliancedigital.in': 'Reliance Digital Official Electronics',
+        'jiomart.com': 'Reliance JioMart Marketplace',
+        'bigbasket.com': 'Tata BigBasket Marketplace',
+        'blinkit.com': 'Blinkit Quick Commerce',
+        'zepto.com': 'Zepto Quick Commerce',
+        'boat-lifestyle.com': 'boAt Lifestyle Official D2C Brand'
     }
 
     def analyze(self, url):
@@ -678,13 +705,17 @@ class StoreTrustAgent:
         for trusted_dom, label in self.TRUSTED_PLATFORMS.items():
             if domain == trusted_dom or domain.endswith('.' + trusted_dom):
                 domain_age = self.fetch_domain_age(domain)
+                age_yrs = domain_age.get('age_years', -1)
+                age_yrs_num = float(age_yrs) if isinstance(age_yrs, (int, float)) else -1.0
                 return {
                     'trust_score': 0.99,
                     'trust_level': 'ESTABLISHED',
-                    'gstin': 'Multi-Seller Registered Entity',
+                    'business_entity': label,
+                    'business_entity_valid': True,
+                    'gstin': 'Enterprise / Multi-Seller Platform',
                     'gstin_valid': True,
-                    'payment_gateways': ['Amazon Pay', 'Credit/Debit Card', 'UPI', 'NetBanking', 'COD'],
-                    'domain_age': domain_age if domain_age['age_years'] > 0 else {'age_text': '20+ years (Global Brand)'},
+                    'payment_gateways': ['Escrow Buyer Protection', 'Credit/Debit Card', 'UPI', 'NetBanking', 'PayPal/Wallet'],
+                    'domain_age': domain_age if age_yrs_num > 0 else {'age_text': '20+ years (Global Brand)'},
                     'review_summary': {
                         'sentiment': 'POSITIVE',
                         'rating_label': 'Tier-1 Verified Marketplace',
@@ -721,8 +752,8 @@ class StoreTrustAgent:
                 'signals': {},
                 'domain_age': {'age_text': 'Unreachable'},
                 'payment_gateways': [],
-                'score_breakdown': {'base_trust': 0, 'domain_age': 0, 'gateways': 0, 'review_factor': 0, 'platform_integrity': 0},
-                'review_summary': {'rating_label': '', 'summary': '', 'sentiment': 'NO_DATA', 'has_meaningful_results': False, 'sources': []}
+                'score_breakdown': {'base_trust': 0, 'domain_age': 0, 'gateways': None, 'review_factor': None, 'platform_integrity': 0},
+                'review_summary': {'rating_label': 'Store Unreachable', 'summary': 'Could not connect to storefront to verify reviews.', 'sentiment': 'NO_DATA', 'has_meaningful_results': False, 'sources': []}
             }
 
         html = resp.text
@@ -845,7 +876,8 @@ class StoreTrustAgent:
         # 3. Domain Age
         domain_age = self.fetch_domain_age(domain)
         signals['domain_age'] = domain_age
-        if domain_age['age_years'] >= 1:
+        age_years_val = float(domain_age['age_years']) if isinstance(domain_age.get('age_years'), (int, float)) else -1.0
+        if age_years_val >= 1:
             reasons.append(f"Established domain: {domain_age['age_text']}")
         elif domain_age['is_new']:
             reasons.append(f"⚠️ Brand new domain ({domain_age['age_days']} days old) — high risk of pop-up scam store")
@@ -899,13 +931,13 @@ class StoreTrustAgent:
         base_trust = 0.50
 
         # Pillar 1: Domain Age Contribution
-        if domain_age['age_years'] >= 5:
+        if age_years_val >= 5:
             domain_score = 1.0
             base_trust += 0.25
-        elif domain_age['age_years'] >= 2:
+        elif age_years_val >= 2:
             domain_score = 0.85
             base_trust += 0.15
-        elif domain_age['age_years'] >= 1:
+        elif age_years_val >= 1:
             domain_score = 0.70
             base_trust += 0.08
         elif domain_age['is_new']:
@@ -922,7 +954,7 @@ class StoreTrustAgent:
             gateway_score = 0.20
             base_trust -= 0.20
         else:
-            gateway_score = 0.50
+            gateway_score = None  # No specific gateway detected — do not fake 50%
 
         # Pillar 3: Entity & Legal Legitimacy
         if is_entity_verified:
@@ -939,7 +971,12 @@ class StoreTrustAgent:
         # Multiplicative Risk Multipliers
         risk_multiplier = 1.0
 
-        # Review Multiplier
+        # Review Multiplier & Transparent Factor
+        has_real_reviews = bool(
+            review_data.get('trustpilot_rating')
+            or review_data.get('store_embedded_rating')
+            or review_data.get('snippets_found', 0) > 0
+        )
         if review_data['sentiment'] == 'HIGH_RISK':
             risk_multiplier *= 0.40  # Hard 60% penalty if verified non-delivery scam reports
             review_factor_score = 20
@@ -949,8 +986,10 @@ class StoreTrustAgent:
         elif review_data['sentiment'] == 'POSITIVE':
             risk_multiplier *= 1.10
             review_factor_score = 95
+        elif has_real_reviews:
+            review_factor_score = 75
         else:
-            review_factor_score = 60
+            review_factor_score = None  # Zero fake percentage: Store is unreviewed
 
         # Fraud Signals Multipliers (only penalize pricing if NOT a replica store)
         if fraud_signals['suspicious_pricing'] and not is_replica_store:
@@ -977,10 +1016,10 @@ class StoreTrustAgent:
         # Categorize Trust Level with Replica & D2C Startup Verification
         if is_replica_store and review_data['sentiment'] != 'HIGH_RISK' and (gateways or len(policies_found) >= 2):
             trust_level = "REPLICA_VERIFIED"
-            final_trust_score = max(0.68, round(final_trust_score, 2))
+            final_trust_score = round(final_trust_score, 2)
         elif is_startup and not signals.get('enterprise_brand'):
             trust_level = "STARTUP_VERIFIED"
-            final_trust_score = max(0.74, min(0.88, round(final_trust_score * 1.15, 2)))
+            final_trust_score = round(min(0.92, final_trust_score * 1.15), 2)
             if business_entity in ("Independent Storefront", "Shopify Merchant Infrastructure", "WooCommerce Merchant Infrastructure"):
                 business_entity = f"Verified D2C Startup ({gateways[0]} Merchant)"
                 signals['business_entity'] = business_entity
@@ -991,9 +1030,9 @@ class StoreTrustAgent:
             trust_level = "SOME_SIGNALS"
         elif final_trust_score >= 0.30:
             trust_level = "FEW_SIGNALS"
-        elif review_data['sentiment'] == 'UNKNOWN' and signals['ssl_valid'] and not fraud_signals['suspicious_pricing']:
+        elif review_factor_score is None and signals['ssl_valid'] and not fraud_signals['suspicious_pricing']:
             trust_level = "UNREVIEWED_NEUTRAL"
-            final_trust_score = max(0.50, round(final_trust_score, 2))
+            final_trust_score = round(final_trust_score, 2)
         else:
             trust_level = "NO_SIGNALS"
 
@@ -1020,7 +1059,7 @@ class StoreTrustAgent:
         score_breakdown = {
             'base_trust': int(base_trust * 100),
             'domain_age': int(domain_score * 100),
-            'gateways': int(gateway_score * 100),
+            'gateways': int(gateway_score * 100) if gateway_score is not None else None,
             'review_factor': review_factor_score,
             'platform_integrity': int(final_trust_score * 100)
         }

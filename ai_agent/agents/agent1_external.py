@@ -46,11 +46,16 @@ import pickle
 import requests
 import time
 import socket
+socket.setdefaulttimeout(2.5)
+import torch
 
 class ExternalAnalysisAgent:
     def __init__(self):
         print("Loading External Analysis Agent...")
-        self.model = SentenceTransformer('sentence-transformers/all-MiniLM-L6-v2')
+        # Use CUDA if available, otherwise CPU. Force CPU on macOS to prevent MTLCompilerService MPS crashes in worker processes
+        device_str = 'cuda' if torch.cuda.is_available() else 'cpu'
+        self.device = device_str
+        self.model = SentenceTransformer('sentence-transformers/all-MiniLM-L6-v2', device=device_str)
         
         # Load pickle models for URL analysis
         # ALGORITHM: Support Vector Machine (SVM) with TF-IDF vectorization
@@ -184,9 +189,9 @@ class ExternalAnalysisAgent:
                 return cached_result
 
         result = {'reachable': False, 'ssl_valid': True, 'final_url': url, 'redirected': False}
-
+        target_req_url = url if url.startswith(('http://', 'https://')) else f"http://{url}"
         try:
-            resp = requests.get(url, timeout=1.5, allow_redirects=True, headers={'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)'})
+            resp = requests.get(target_req_url, timeout=1.0, allow_redirects=True, headers={'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)'})
             result['reachable'] = True
             result['final_url'] = resp.url
             final_host = urlparse(resp.url).netloc.lower().split(':')[0]
@@ -195,8 +200,9 @@ class ExternalAnalysisAgent:
             result['ssl_valid'] = False
             result['reachable'] = True
         except Exception:
-            # Fallback: check if host at least resolves in DNS
+            # Fallback: check if host at least resolves in DNS quickly
             try:
+                socket.setdefaulttimeout(1.0)
                 socket.gethostbyname(host)
                 result['reachable'] = True
             except Exception:
@@ -261,12 +267,6 @@ class ExternalAnalysisAgent:
         normalized = url.lower().strip().rstrip('/')
         if normalized in self.phishtank_urls:
             return True
-        # Also check without trailing path variants
-        from urllib.parse import urlparse
-        parsed = urlparse(normalized)
-        base = f"{parsed.scheme}://{parsed.netloc}"
-        if base in self.phishtank_urls:
-            return True
         return False
 
     def analyze_url_risk(self, url, page_url=""):
@@ -319,9 +319,9 @@ class ExternalAnalysisAgent:
             reasons.append("Live check: URL is unreachable right now (DNS/connection failure) — often a dead or sinkholed phishing host")
         else:
             if not live['ssl_valid']:
-                risk_score = max(risk_score, 0.6)
-                reasons.append("Live check: SSL certificate is invalid on the live connection — insecure or spoofed endpoint")
-            if live['redirected']:
+                risk_score = max(risk_score, 0.3)
+                reasons.append("Live check: SSL certificate is invalid or unverified on the live connection")
+            if live['redirected'] and isinstance(live.get('final_url'), str):
                 final_domain = urlparse(live['final_url']).netloc
                 reasons.append(f"Live check: URL redirects in real time to a different domain: {final_domain}")
                 redirect_similarity = self.check_domain_similarity(live['final_url'])

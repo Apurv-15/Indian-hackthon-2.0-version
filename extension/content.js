@@ -35,6 +35,26 @@ if (document.body) {
   document.addEventListener("DOMContentLoaded", () => document.body.appendChild(tooltip));
 }
 
+function resolveTargetUrl(target) {
+    if (!target) return "";
+    let rawHref = target.href || "";
+    const dataHref = target.getAttribute("data-href");
+    if (dataHref && (dataHref.startsWith("http://") || dataHref.startsWith("https://"))) {
+        return dataHref;
+    }
+    try {
+        const parsed = new URL(rawHref);
+        const host = parsed.hostname.toLowerCase();
+        if (host.includes("google.") || host.includes("bing.") || host.includes("duckduckgo.")) {
+            const redirectParam = parsed.searchParams.get("url") || parsed.searchParams.get("q") || parsed.searchParams.get("dest") || parsed.searchParams.get("adurl");
+            if (redirectParam && (redirectParam.startsWith("http://") || redirectParam.startsWith("https://"))) {
+                return redirectParam;
+            }
+        }
+    } catch (e) {}
+    return rawHref;
+}
+
 // Function to update tooltip content
 function updateTooltip(x, y, data) {
   if (data.error) {
@@ -46,7 +66,10 @@ function updateTooltip(x, y, data) {
         <span style="color: ${RISK_COLORS[data.riskLevel] || '#fff'}; font-size: 11px; padding: 2px 6px; border-radius: 4px; background: rgba(0,0,0,0.3);">${data.riskLevel} Risk</span>
       </div>
       <div><strong>Verdict:</strong> ${data.threatType || 'Unknown'}</div>
-      <div><strong>User Trust Score:</strong> ${data.confidenceScore}%</div>
+      ${data.riskLevel === 'Safe' 
+        ? `<div><strong>Safety Score:</strong> <span style="color:#00e676; font-weight:600;">${data.safetyScore != null ? data.safetyScore : 99}%</span> <span style="font-size:10px; color:#888;">(Confidence: ${data.confidenceScore}%)</span></div>`
+        : `<div><strong>Threat Confidence:</strong> <span style="color:#ff5252; font-weight:600;">${data.confidenceScore}%</span></div>`
+      }
       <div style="margin-top: 6px; font-size: 11px; color: #ccc;">${data.explanation}</div>
     `;
     tooltip.style.borderTop = `3px solid ${RISK_COLORS[data.riskLevel] || 'transparent'}`;
@@ -62,7 +85,7 @@ document.addEventListener("click", (e) => {
     if (target && target.dataset.aegisResult) {
         const data = JSON.parse(target.dataset.aegisResult);
         if (data.riskLevel === "High" || data.riskLevel === "Critical") {
-            const proceed = confirm(`🚨 AegisAI WARNING 🚨\n\nThis link appears to be a ${data.riskLevel.toUpperCase()} RISK phishing threat.\n\nType: ${data.threatType}\nUser Trust Score: ${data.confidenceScore}%\n\nReason: ${data.explanation}\n\nAre you sure you want to proceed?`);
+            const proceed = confirm(`🚨 AegisAI WARNING 🚨\n\nThis link appears to be a ${data.riskLevel.toUpperCase()} RISK phishing threat.\n\nType: ${data.threatType}\nDetection Confidence: ${data.confidenceScore}%\n\nReason: ${data.explanation}\n\nAre you sure you want to proceed?`);
             if (!proceed) {
                 e.preventDefault();
                 e.stopPropagation();
@@ -95,7 +118,8 @@ document.addEventListener("mouseover", (e) => {
           if (!chrome.runtime?.id) return;
           const anchorText = (target.innerText || target.title || target.getAttribute("aria-label") || "").trim();
           const pageUrl = window.location.href;
-          chrome.runtime.sendMessage({ action: "analyze", input: target.href, anchorText: anchorText, pageUrl: pageUrl }, (response) => {
+          const resolvedUrl = resolveTargetUrl(target);
+          chrome.runtime.sendMessage({ action: "analyze", input: resolvedUrl, anchorText: anchorText, pageUrl: pageUrl }, (response) => {
               if (chrome.runtime.lastError) {
                   console.warn("AegisAI extension context invalidated or reloaded.");
                   return;
@@ -170,7 +194,8 @@ function scanAllLinks() {
             if (!chrome.runtime?.id) return;
             const anchorText = (target.innerText || target.title || target.getAttribute("aria-label") || "").trim();
             const pageUrl = window.location.href;
-            chrome.runtime.sendMessage({ action: "analyze", input: target.href, anchorText: anchorText, pageUrl: pageUrl }, (response) => {
+            const resolvedUrl = resolveTargetUrl(target);
+            chrome.runtime.sendMessage({ action: "analyze", input: resolvedUrl, anchorText: anchorText, pageUrl: pageUrl }, (response) => {
                 if (chrome.runtime.lastError) return;
                 if (response && !response.error) {
                     target.dataset.aegisResult = JSON.stringify(response);
@@ -374,18 +399,23 @@ function injectStoreTrustBadge() {
                             </div>
                             <div style="display: flex; justify-content: space-between; margin-bottom: 4px;">
                                 <span>Payment Security</span>
-                                <strong>${data.score_breakdown.gateways}%</strong>
+                                <strong>${data.score_breakdown.gateways !== null && data.score_breakdown.gateways !== undefined ? data.score_breakdown.gateways + '%' : 'Standard HTTPS'}</strong>
                             </div>
+                            ${data.score_breakdown.gateways !== null && data.score_breakdown.gateways !== undefined ? `
                             <div style="background: #e2d5c3; height: 5px; border-radius: 3px; overflow: hidden; margin-bottom: 8px;">
                                 <div style="background: ${scoreColor}; height: 100%; width: ${data.score_breakdown.gateways}%;"></div>
-                            </div>
+                            </div>` : ''}
                             <div style="display: flex; justify-content: space-between; margin-bottom: 4px;">
                                 <span>External Reviews Sentiment</span>
-                                <strong>${data.score_breakdown.review_factor}%</strong>
+                                <strong>${data.score_breakdown.review_factor !== null && data.score_breakdown.review_factor !== undefined ? data.score_breakdown.review_factor + '%' : 'Unreviewed (No Data)'}</strong>
                             </div>
+                            ${data.score_breakdown.review_factor !== null && data.score_breakdown.review_factor !== undefined ? `
                             <div style="background: #e2d5c3; height: 5px; border-radius: 3px; overflow: hidden;">
                                 <div style="background: ${scoreColor}; height: 100%; width: ${data.score_breakdown.review_factor}%;"></div>
-                            </div>
+                            </div>` : `
+                            <div style="font-size: 10.5px; color: #78716c; font-style: italic; margin-top: 2px;">
+                                No external independent rating on file
+                            </div>`}
                         </div>
                     ` : ''}
 
@@ -394,7 +424,7 @@ function injectStoreTrustBadge() {
 
                 <div class="aegis-badge-btn" id="aegis-badge-toggle">
                     <span>${shieldIcon}</span>
-                    <span>Store Trust: <strong style="color: #111827; font-weight: 800;">${score}%</strong></span>
+                    <span>${data.trust_level === 'UNREVIEWED_NEUTRAL' ? 'Store Signals' : 'Store Trust'}: <strong style="color: #111827; font-weight: 800;">${score}%</strong></span>
                 </div>
             `;
 
