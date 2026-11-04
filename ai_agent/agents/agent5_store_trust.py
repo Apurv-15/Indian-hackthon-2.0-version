@@ -54,7 +54,9 @@ class StoreTrustAgent:
         'bluestone.com': 'BlueStone Jewellery & Lifestyle Ltd',
         'caratlane.com': 'CaratLane Trading Pvt Ltd',
         'ajio.com': 'Reliance Retail Ltd (Ajio)',
-        'sugarcosmetics.com': 'Vellvette Lifestyle Pvt Ltd'
+        'sugarcosmetics.com': 'Vellvette Lifestyle Pvt Ltd',
+        'swiggy.com': 'Swiggy Limited (Bundl Technologies Pvt Ltd)',
+        'zomato.com': 'Zomato Limited (Eternal Ltd)'
     }
     
     PAYMENT_GATEWAYS = {
@@ -746,6 +748,8 @@ class StoreTrustAgent:
         'bigbasket.com': 'Tata BigBasket Marketplace',
         'blinkit.com': 'Blinkit Quick Commerce',
         'zepto.com': 'Zepto Quick Commerce',
+        'swiggy.com': 'Swiggy Official Platform (Bundl Technologies / Swiggy Limited)',
+        'zomato.com': 'Zomato Official Marketplace (Eternal Limited)',
         'boat-lifestyle.com': 'boAt Lifestyle Official D2C Brand'
     }
 
@@ -980,13 +984,15 @@ class StoreTrustAgent:
             reasons.append("📦 Product Classification: Store sells Master Copy / 7A Replica products (Not OEM originals)")
 
         # =========================================================================
-        # ACCURACY OVERHAUL: MULTIPLICATIVE PENALTY MODEL & SCORE BREAKDOWN
+        # [FORMULA: STORE TRUST SCORING MODEL]
+        # Multi-pillar store legitimacy and fraud penalty formula
+        # Search tag: [FORMULA: STORE_TRUST]
         # =========================================================================
         
         # Base Foundation Score (0.0 to 1.0)
         base_trust = 0.50
 
-        # Pillar 1: Domain Age Contribution
+        # [FORMULA: PILLAR 1 - DOMAIN AGE]
         if age_years_val >= 5:
             domain_score = 1.0
             base_trust += 0.25

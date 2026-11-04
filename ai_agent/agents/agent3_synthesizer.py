@@ -29,6 +29,11 @@ Key Features:
 
 class SynthesizerAgent:
     def __init__(self):
+        # =========================================================================
+        # [FORMULA: RISK THRESHOLDS]
+        # Maps numerical scores (0.0 to 1.0) into discrete threat classifications
+        # Search tag: [FORMULA: THRESHOLDS]
+        # =========================================================================
         self.thresholds = {
             'low': 0.22,
             'medium': 0.5,
@@ -36,13 +41,18 @@ class SynthesizerAgent:
             'critical': 0.95
         }
         
+        # =========================================================================
+        # [FORMULA: ENSEMBLE WEIGHTS]
+        # Baseline contribution weights for each specialized agent in full messages
+        # Search tag: [FORMULA: WEIGHTS]
+        # =========================================================================
         self.weights = {
-            'phishing': 0.4,
-            'url_risk': 0.3,
-            'spam': 0.15,
-            'ai_generated': 0.1,
-            'domain_similarity': 0.05,
-            'prompt_injection': 0.3 # High impact when detected
+            'phishing': 0.4,           # 40% Agent 2: Content Phishing (DeBERTa + MNB)
+            'url_risk': 0.3,           # 30% Agent 1: URL/Domain Risk (SVM + Heuristics)
+            'spam': 0.15,              # 15% Agent 2: Spam Pattern Match
+            'ai_generated': 0.1,       # 10% Agent 2: Machine Generated Copy
+            'domain_similarity': 0.05, #  5% Agent 1: Homoglyph / Typosquatting
+            'prompt_injection': 0.3    # 30% Agent 4: Adversarial Prompt Injection Guard
         }
 
     def _safe_float(self, val, default=0.0):
@@ -59,7 +69,12 @@ class SynthesizerAgent:
         agent2_results = agent2_results or {}
         agent4_results = agent4_results or {}
 
-        # If the input is a raw URL, evaluate URL-specific metrics primarily
+        # =========================================================================
+        # [FORMULA: RAW URL HOVER SCORING]
+        # Formula used by Browser Extension on link hover / click
+        # Score = max(URL, Typosquat) * 0.70 + Keywords * 0.30 + Divergence Penalty
+        # Search tag: [FORMULA: URL_SCORE]
+        # =========================================================================
         if agent2_results.get('is_raw_url'):
             url_risk_val = max(self._safe_float(agent1_results.get('url_ml_risk')), self._safe_float(agent1_results.get('url_risk')))
             domain_similarity = self._safe_float(agent1_results.get('domain_similarity'))
@@ -84,6 +99,12 @@ class SynthesizerAgent:
             combined = max(url_risk_val, sim_risk) * 0.7 + a2_phishing * 0.3 + divergence_penalty
             return min(max(combined, url_risk_val, sim_risk, divergence_penalty), 1.0)
 
+        # =========================================================================
+        # [FORMULA: FULL MESSAGE CONSENSUS SCORING]
+        # Formula used for full email / message / scanner text inputs
+        # Weighted sum across all 4 agents + dynamic situational penalties
+        # Search tag: [FORMULA: CONSENSUS]
+        # =========================================================================
         risk_score = 0.0
         
         # Give higher priority to ML based scores if available
@@ -100,6 +121,7 @@ class SynthesizerAgent:
         dom_sim = self._safe_float(agent1_results.get('domain_similarity'))
         a4_conf = self._safe_float(agent4_results.get('confidence'))
 
+        # Weighted Agent Summation
         risk_score += phish_prob * self.weights['phishing']
         risk_score += url_risk_val * self.weights['url_risk']
         risk_score += spam_val * self.weights['spam']
@@ -109,18 +131,20 @@ class SynthesizerAgent:
         # Integrate Agent 4 Prompt Injection Score
         risk_score += a4_conf * self.weights['prompt_injection']
         
-        # New: Factor in connection score (divergence)
+        # [PENALTY: SEMANTIC DIVERGENCE]
+        # Penalizes mismatch between visible anchor text and actual destination URL
         connection_score = self._safe_float(agent2_results.get('connection_score', 1.0))
         if connection_score < 0.4:
-            # Low connection = higher risk
             divergence_penalty = (0.4 - connection_score) * 0.5 
             risk_score += divergence_penalty
             
-        # Adjust based on aggressive sentiment
+        # [PENALTY: URGENCY / THREAT SENTIMENT BOOST]
+        # Penalizes aggressive coercive pressure detected by DistilBERT
         if agent2_results.get('sentiment_label') == 'NEGATIVE' and self._safe_float(agent2_results.get('sentiment_score')) > 0.8:
             risk_score += 0.1
             
-        # Combine Prompt Injection flags from Agent 2 (heuristic) and Agent 4 (transformer)
+        # [OVERRIDE: PROMPT INJECTION SAFETY FLOOR]
+        # Ensures that confirmed prompt injection attacks cannot drop below HIGH risk
         a2_pi = bool(agent2_results.get('prompt_injection', False))
         a4_pi = bool(agent4_results.get('prompt_injection_detected', False))
         if a2_pi or a4_pi:
@@ -128,6 +152,11 @@ class SynthesizerAgent:
             
         return min(risk_score, 1.0)
     
+    # =========================================================================
+    # [FORMULA: RISK LEVEL GATING]
+    # Maps calculated continuous score to categorical risk level
+    # Search tag: [FORMULA: LEVEL_GATING]
+    # =========================================================================
     def determine_risk_level(self, risk_score):
         """Convert numerical score to risk level"""
         if risk_score >= self.thresholds['critical']:
@@ -182,8 +211,9 @@ class SynthesizerAgent:
         
         return threats
     
-    def generate_explanation(self, agent1_results, agent2_results, agent4_results, threat_types, risk_score):
+    def generate_explanation(self, agent1_results, agent2_results, agent4_results, threat_types, risk_score, risk_level=None):
         """Generate detailed, context-aware forensic reasoning like a security expert."""
+        risk_level = risk_level or self.determine_risk_level(risk_score)
         agent1_results = agent1_results or {}
         agent2_results = agent2_results or {}
         agent4_results = agent4_results or {}
@@ -297,9 +327,45 @@ class SynthesizerAgent:
         elif not actions:
             actions.append("Report this message to security team")
         
+        # ── Human-Friendly Summary & Clean Reasons ──
+        human_reasons = []
+        for r in reasons:
+            clean = r
+            # Strip technical prefixes
+            for pfx in ["URL Analysis (ML): ", "URL Analysis: ", "Content Analysis: ", "Sender Spoofing: ", "Behavioral Threat: ", "Prompt Injection Agent: ", "Prompt Injection: ", "Hidden Threat: "]:
+                if clean.startswith(pfx):
+                    clean = clean[len(pfx):]
+            # Strip helper tails
+            clean = clean.split(" — helper:")[0].strip()
+            if clean and clean not in human_reasons:
+                human_reasons.append(clean)
+
+        # Generate 1-sentence plain-English human summary
+        summary = ""
+        if risk_level in ["HIGH", "CRITICAL"]:
+            if "Phishing" in threat_types or any("brand" in r.lower() or "mimic" in r.lower() or "impersonat" in r.lower() for r in human_reasons):
+                summary = "Dangerous link: Appears to mimic a trusted brand to steal your account credentials."
+            elif "Prompt Injection" in threat_types:
+                summary = "Security risk: Contains hidden adversarial commands designed to hijack AI systems."
+            elif "Malicious URL" in threat_types:
+                summary = "Unsafe destination: Links to an unverified or potentially compromised web address."
+            else:
+                summary = "High risk detected: This link exhibits strong signs of deceptive or malicious activity."
+        elif risk_level == "MEDIUM":
+            summary = "Suspicious link: Exhibits unusual patterns or unverified domain attributes. Proceed with caution."
+        elif risk_level == "LOW":
+            summary = "Minor warnings: Mostly benign, but includes uncommon links or external redirection."
+        else:
+            summary = "Verified safe: No phishing patterns, malicious redirects, or brand spoofing detected."
+
+        action_advice = actions[0] if actions else "Safe to proceed."
+
         return {
             'reasons': reasons[:6],
-            'actions': actions[:4]
+            'actions': actions[:4],
+            'summary': summary,
+            'human_reasons': human_reasons[:4],
+            'action_advice': action_advice
         }
     
     def synthesize(self, agent1_results, agent2_results, agent4_results):
@@ -311,7 +377,7 @@ class SynthesizerAgent:
         threat_types = self.determine_threat_type(risk_score, agent1_results, agent2_results, agent4_results)
         
         explanation = self.generate_explanation(
-            agent1_results, agent2_results, agent4_results, threat_types, risk_score
+            agent1_results, agent2_results, agent4_results, threat_types, risk_score, risk_level
         )
         
         # Confidence: Dynamically reflects certainty in the verdict

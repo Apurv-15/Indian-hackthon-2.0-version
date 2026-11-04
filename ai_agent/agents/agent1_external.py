@@ -332,26 +332,31 @@ class ExternalAnalysisAgent:
         domain = self.extract_domain(url).lower()
         is_already_official = any(domain == d or domain.endswith('.' + d) for d in self.legitimate_domains)
 
+        # =========================================================================
+        # [FORMULA: URL HEURISTIC PENALTIES]
+        # Individual point deductions based on deceptive URL structures
+        # Search tag: [FORMULA: URL_PENALTIES]
+        # =========================================================================
         for tld in self.suspicious_tlds:
             if domain.endswith(tld) or f"{tld}/" in url.lower():
-                risk_score += 0.3
+                risk_score += 0.3  # Penalty: Suspicious TLD (+0.30)
                 reasons.append(f"Suspicious TLD: {tld}")
                 break
         
         if re.search(r'\b\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}\b', domain):
-            risk_score += 0.4
+            risk_score += 0.4      # Penalty: Raw IP Address Host (+0.40)
             reasons.append("IP address used instead of domain name")
         
         # Only check dots in domain hostname, not query strings
         clean_host = re.sub(r'\.(co|com|gov|net|org|edu)\.[a-z]{2,}$', '', domain)
         if clean_host.count('.') >= 3:
-            risk_score += 0.2
+            risk_score += 0.2      # Penalty: Excessive Subdomains (+0.20)
             reasons.append(f"Excessive subdomains in host: {domain}")
         
         shortening_services = ['bit.ly', 'tinyurl', 'goo.gl', 'ow.ly', 'tiny.cc']
         for service in shortening_services:
             if service in domain:
-                risk_score += 0.3
+                risk_score += 0.3  # Penalty: Obfuscated URL Shortener (+0.30)
                 reasons.append(f"URL shortening service detected: {service}")
                 break
         
@@ -367,22 +372,26 @@ class ExternalAnalysisAgent:
                 or risk_score > 0.2
             )
             if has_other_signals:
-                keyword_boost = min(0.1 * len(matched_keywords), 0.4)
+                keyword_boost = min(0.1 * len(matched_keywords), 0.4) # Penalty: Login keywords in unverified link (+0.10 to +0.40)
                 risk_score += keyword_boost
                 reasons.append(f"Suspicious keyword(s) in unverified URL: {', '.join(repr(k) for k in matched_keywords)}")
 
-        # Brand impersonation: Brand appears in domain hostname (NOT path/query) but is not official
+        # =========================================================================
+        # [FORMULA: BRAND IMPERSONATION & TYPOSQUATTING FLOOR]
+        # Direct override floors for impersonation attacks
+        # Search tag: [FORMULA: BRAND_SPOOFING]
+        # =========================================================================
         if not is_already_official and domain:
             domain_tokens = set(re.split(r'[\.\-_0-9]+', domain))
             for brand, official_domains in self.legitimate_brand_domains.items():
                 if (brand in domain_tokens) or f"-{brand}" in domain or f"{brand}-" in domain:
-                    risk_score = max(risk_score, 0.90)
+                    risk_score = max(risk_score, 0.90)  # Direct floor: Brand spoofing (0.90 HIGH/CRITICAL)
                     reasons.append(f"Brand impersonation: '{brand}' appears in domain '{domain}' but is not an official {brand} domain")
                     break
         
         domain_similarity = self.check_domain_similarity(url)
         if domain_similarity > 0.7:
-            risk_score = max(risk_score, 0.85)
+            risk_score = max(risk_score, 0.85)          # Direct floor: Homoglyph attack (0.85 HIGH)
             reasons.append(f"Domain '{domain}' is visually similar ({domain_similarity:.0%}) to a legitimate brand (homoglyph/typosquatting)")
             
         url_ml_prob = 0.0
