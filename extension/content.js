@@ -9,6 +9,15 @@ const RISK_COLORS = {
   "Safe": "#4dff4d"
 };
 
+function escapeHtml(value) {
+  return String(value ?? "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+}
+
 // Create a tooltip element
 const tooltip = document.createElement("div");
 tooltip.id = "aegis-tooltip";
@@ -65,12 +74,12 @@ function updateTooltip(x, y, data) {
         <span>AegisAI Analysis</span>
         <span style="color: ${RISK_COLORS[data.riskLevel] || '#fff'}; font-size: 11px; padding: 2px 6px; border-radius: 4px; background: rgba(0,0,0,0.3);">${data.riskLevel} Risk</span>
       </div>
-      <div><strong>Verdict:</strong> ${data.threatType || 'Unknown'}</div>
+      <div><strong>Verdict:</strong> ${escapeHtml(data.threatType || 'Unknown')}</div>
       ${data.riskLevel === 'Safe' 
         ? `<div><strong>Safety Score:</strong> <span style="color:#00e676; font-weight:600;">${data.safetyScore != null ? data.safetyScore : 99}%</span> <span style="font-size:10px; color:#888;">(Confidence: ${data.confidenceScore}%)</span></div>`
         : `<div><strong>Threat Confidence:</strong> <span style="color:#ff5252; font-weight:600;">${data.confidenceScore}%</span></div>`
       }
-      <div style="margin-top: 6px; font-size: 11px; color: #ccc;">${data.explanation}</div>
+      <div style="margin-top: 6px; font-size: 11px; color: #ccc;">${escapeHtml(data.explanation || 'No explanation available.')}</div>
     `;
     tooltip.style.borderTop = `3px solid ${RISK_COLORS[data.riskLevel] || 'transparent'}`;
   }
@@ -307,6 +316,9 @@ function injectStoreTrustBadge() {
                 }
 
                 const reviewColor = '#111827';
+                const evidenceText = typeof reviewSummary.review_confidence === 'number'
+                    ? `<div style="margin-top: 5px; color: #475569; font-size: 10.5px;">Evidence confidence: ${Math.round(reviewSummary.review_confidence * 100)}% (${reviewSummary.evidence_sources_checked || 0} source${reviewSummary.evidence_sources_checked === 1 ? '' : 's'} checked)</div>`
+                    : '';
 
                 const links = Array.isArray(reviewSummary.sources)
                     ? reviewSummary.sources.filter(source => source?.name && source?.url)
@@ -317,7 +329,7 @@ function injectStoreTrustBadge() {
                         <div style="margin-top: 12px; padding-top: 8px; border-top: 1px solid #d5c8b7; font-size: 11px;">
                             <span style="color: #111827; font-weight: 700;">Search Feedback: </span>
                             <div style="display: flex; gap: 8px; margin-top: 5px; flex-wrap: wrap;">
-                                ${links.map(source => `<a class="aegis-no-scan" href="${escapeHtml(source.url)}" target="_blank" rel="noopener noreferrer" style="color: #0f172a; font-weight: 600; text-decoration: underline; pointer-events: auto;">${escapeHtml(source.name)}</a>`).join('')}
+                                ${links.map(source => `<a class="aegis-no-scan" href="${escapeHtml(source.url)}" target="_blank" rel="noopener noreferrer" style="color: #0f172a; font-weight: 600; text-decoration: underline; pointer-events: auto;">${escapeHtml(source.name)}${source.checked ? ' ✓' : ' (not checked)'}</a>`).join('')}
                             </div>
                         </div>
                     `
@@ -350,6 +362,7 @@ function injectStoreTrustBadge() {
                             ${escapeHtml(reviewSummary.rating_label || 'Analyzed')}
                         </div>
                         <div style="line-height: 1.5; color: #111827; font-size: 12px; font-weight: 500;">${escapeHtml(reviewSummary.summary || '')}</div>
+                        ${evidenceText}
                         ${takeawaysHtml}
                         ${snippetsHtml}
                         ${linksHtml}

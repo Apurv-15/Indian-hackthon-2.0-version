@@ -1,6 +1,7 @@
 const API_URL = "http://localhost:5001/analyze";
 const STORE_TRUST_API_URL = "http://localhost:5001/store-trust";
 const HEALTH_URL = "http://localhost:5001/health";
+const REQUEST_TIMEOUT_MS = 30000;
 
 // Bounded LRU Caches
 const MAX_CACHE_SIZE = 200;
@@ -26,10 +27,24 @@ function getBoundedCache(map, key) {
   return entry.value;
 }
 
+async function fetchJson(url, options = {}, timeoutMs = REQUEST_TIMEOUT_MS) {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    const response = await fetch(url, { ...options, signal: controller.signal });
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok) {
+      throw new Error(data.error || `Backend returned HTTP ${response.status}`);
+    }
+    return data;
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
 chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
   if (request.action === "health") {
-    fetch(HEALTH_URL, { method: "GET" })
-      .then(resp => resp.json())
+    fetchJson(HEALTH_URL, { method: "GET" }, 5000)
       .then(data => sendResponse({ online: data.status === "ok" }))
       .catch(() => sendResponse({ online: false }));
     return true;
@@ -50,12 +65,11 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
       return true;
     }
 
-    fetch(API_URL, {
+    fetchJson(API_URL, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ input, anchor_text: anchorText, page_url: pageUrl })
     })
-    .then(response => response.json())
     .then(data => {
       if (!data.error) setBoundedCache(cache, cacheKey, data, 10 * 60 * 1000); // 10 min TTL
       sendResponse(data);
@@ -75,12 +89,11 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
       return true;
     }
 
-    fetch(STORE_TRUST_API_URL, {
+    fetchJson(STORE_TRUST_API_URL, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ url })
     })
-    .then(response => response.json())
     .then(data => {
       if (!data.error) setBoundedCache(storeTrustCache, url, data, 30 * 60 * 1000); // 30 min TTL
       sendResponse(data);

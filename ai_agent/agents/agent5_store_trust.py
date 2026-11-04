@@ -489,6 +489,37 @@ class StoreTrustAgent:
                 pass
         return rating, snippets
 
+    @staticmethod
+    def _review_confidence(trustpilot_rating, store_rating, snippets):
+        """Estimate how much independent evidence supports the review sentiment."""
+        external_sources = 0
+        review_count = 0
+        if trustpilot_rating:
+            external_sources += 1
+            review_count = max(0, int(trustpilot_rating.get('review_count') or 0))
+        if snippets:
+            external_sources += 1
+
+        if external_sources == 0:
+            return 0.0, None
+
+        volume_factor = min(1.0, (review_count / 100.0) ** 0.5) if review_count else 0.0
+        confidence = 0.20 + (0.20 * min(external_sources, 2)) + (0.45 * volume_factor)
+        if snippets:
+            confidence += 0.10
+        if store_rating is not None and not trustpilot_rating:
+            confidence = min(confidence, 0.30)
+
+        adjusted_rating = None
+        if trustpilot_rating:
+            # Bayesian smoothing prevents a tiny sample from becoming a strong
+            # positive or negative verdict.
+            rating = float(trustpilot_rating.get('rating_value', 0))
+            prior_count = 25
+            adjusted_rating = ((rating * review_count) + (3.5 * prior_count)) / (review_count + prior_count)
+
+        return round(min(confidence, 0.95), 3), round(adjusted_rating, 2) if adjusted_rating is not None else None
+
     def fetch_customer_reviews(self, domain, store_html=None):
         """
         Multi-strategy customer review fetcher.
@@ -502,9 +533,9 @@ class StoreTrustAgent:
         brand_name = clean_domain.split('.')[0].capitalize()
 
         sources = [
-            {'name': 'Trustpilot', 'url': f"https://www.trustpilot.com/review/{clean_domain}"},
-            {'name': 'Consumer Complaints India', 'url': f"https://www.consumercomplaints.in/search?q={clean_domain}"},
-            {'name': 'MouthShut India', 'url': f"https://www.mouthshut.com/search/result.aspx?q={clean_domain}"}
+            {'name': 'Trustpilot', 'url': f"https://www.trustpilot.com/review/{clean_domain}", 'checked': False},
+            {'name': 'Consumer Complaints India', 'url': f"https://www.consumercomplaints.in/search?q={clean_domain}", 'checked': False},
+            {'name': 'MouthShut India', 'url': f"https://www.mouthshut.com/search/result.aspx?q={clean_domain}", 'checked': False}
         ]
 
         all_snippets = []
@@ -523,16 +554,23 @@ class StoreTrustAgent:
             ddg_queries = [
                 f"{clean_domain} reviews complaints experience",
                 f"site:consumercomplaints.in {clean_domain}",
+                f"site:mouthshut.com {clean_domain}",
             ]
             ddg_futures = {
                 executor.submit(self._query_search_snippets, q, clean_domain): q
                 for q in ddg_queries
             }
             # Collect DDG results
+            source_snippets = {'consumer': [], 'mouthshut': []}
             for future in as_completed(ddg_futures):
                 res = future.result()
                 if res:
                     all_snippets.extend(res)
+                    query = ddg_futures[future]
+                    if 'consumercomplaints.in' in query:
+                        source_snippets['consumer'].extend(res)
+                    elif 'mouthshut.com' in query:
+                        source_snippets['mouthshut'].extend(res)
             # Collect Trustpilot rating
             try:
                 tp_rating = tp_future.result(timeout=7)
@@ -543,6 +581,19 @@ class StoreTrustAgent:
         unique_snippets = list(dict.fromkeys(all_snippets))[:8]
         combined_snippets = " ".join(unique_snippets).lower()
         has_meaningful_results = bool(unique_snippets or tp_rating or store_rating)
+        review_confidence, adjusted_rating = self._review_confidence(
+            tp_rating, store_rating, unique_snippets
+        )
+        if tp_rating:
+            sources[0]['checked'] = True
+            sources[0]['rating'] = tp_rating.get('rating_value')
+            sources[0]['review_count'] = tp_rating.get('review_count', 0)
+        if source_snippets['consumer']:
+            sources[1]['checked'] = True
+            sources[1]['evidence_count'] = len(source_snippets['consumer'])
+        if source_snippets['mouthshut']:
+            sources[2]['checked'] = True
+            sources[2]['evidence_count'] = len(source_snippets['mouthshut'])
 
         service_issue_signals = {
             'delivery delays': ['slow delivery', 'delayed delivery', 'late delivery', 'delivery delay'],
@@ -559,7 +610,7 @@ class StoreTrustAgent:
         # Determine sentiment — prefer hard rating data over text heuristics
         # -----------------------------------------------------------------------
         # Use Trustpilot star rating if available (most reliable signal)
-        effective_rating_raw = tp_rating['rating_value'] if tp_rating else store_rating
+        effective_rating_raw = adjusted_rating if adjusted_rating is not None else store_rating
         tp_review_count = tp_rating['review_count'] if tp_rating else 0
 
         try:
@@ -570,21 +621,23 @@ class StoreTrustAgent:
         if effective_rating is not None:
             if effective_rating >= 4.0:
                 sentiment = "POSITIVE"
-                rating_label = f"✅ Generally Positive Feedback ({effective_rating:.1f}★ on {tp_rating['source'] if tp_rating else 'Store Reviews'}, {tp_review_count:,} reviews)"
-                summary = f"Customers rate this store {effective_rating:.1f}/5 stars — products delivered as described."
+                source_label = tp_rating['source'] if tp_rating else 'Store-reported reviews'
+                count_label = f", {tp_review_count:,} reviews" if tp_rating else ""
+                rating_label = f"✅ Generally Positive Feedback ({effective_rating:.1f}★ adjusted, {source_label}{count_label})"
+                summary = f"Available reviews indicate {effective_rating:.1f}/5 adjusted sentiment; independent evidence confidence is {review_confidence:.0%}."
                 takeaways = [
-                    f"{effective_rating:.1f}/5 star rating with {tp_review_count:,} verified reviews",
+                    f"{effective_rating:.1f}/5 adjusted rating with {tp_review_count:,} reported reviews",
                     "Smooth delivery experience reported by buyers",
                     "Legitimate active store presence"
                 ]
             elif effective_rating >= 2.5:
                 sentiment = "MIXED"
                 if issue_mentions:
-                    rating_label = f"⚠️ Mixed Reviews ({effective_rating:.1f}★, {tp_review_count:,} reviews)"
-                    summary = f"Store rated {effective_rating:.1f}/5 — delivers products but customers report {', '.join(issue_mentions[:2])}."
+                    rating_label = f"⚠️ Mixed Reviews ({effective_rating:.1f}★ adjusted, {tp_review_count:,} reviews)"
+                    summary = f"Store rated {effective_rating:.1f}/5 after sample-size adjustment; customers report {', '.join(issue_mentions[:2])}."
                 else:
-                    rating_label = f"⚠️ Mixed Customer Experiences ({effective_rating:.1f}★)"
-                    summary = f"Store rated {effective_rating:.1f}/5 with mixed customer feedback."
+                    rating_label = f"⚠️ Mixed Customer Experiences ({effective_rating:.1f}★ adjusted)"
+                    summary = f"Store has mixed customer feedback; independent evidence confidence is {review_confidence:.0%}."
                 takeaways = [
                     f"Average {effective_rating:.1f}/5 star rating ({tp_review_count:,} reviews)",
                     "Some customers report service or delivery issues",
@@ -592,8 +645,8 @@ class StoreTrustAgent:
                 ]
             else:
                 sentiment = "HIGH_RISK"
-                rating_label = f"🚨 High Risk — Poor Reviews ({effective_rating:.1f}★, {tp_review_count:,} reviews)"
-                summary = f"Store rated only {effective_rating:.1f}/5 — significant buyer complaints on record."
+                rating_label = f"🚨 High Risk — Poor Reviews ({effective_rating:.1f}★ adjusted, {tp_review_count:,} reviews)"
+                summary = f"Store has a poor adjusted rating of {effective_rating:.1f}/5 with significant buyer complaints on record."
                 takeaways = [
                     f"Very low {effective_rating:.1f}/5 star rating across {tp_review_count:,} reviews",
                     "Serious complaints about non-delivery or fraud",
@@ -655,6 +708,9 @@ class StoreTrustAgent:
             'snippets': [s for s in unique_snippets if len(s) > 20][:4],
             'snippets_found': len(unique_snippets),
             'has_meaningful_results': has_meaningful_results,
+            'review_confidence': review_confidence,
+            'adjusted_rating': adjusted_rating,
+            'evidence_sources_checked': sum(1 for source in sources if source.get('checked')),
             'issue_mentions': issue_mentions,
             'trustpilot_rating': tp_rating,
             'store_embedded_rating': store_rating
@@ -972,22 +1028,21 @@ class StoreTrustAgent:
         risk_multiplier = 1.0
 
         # Review Multiplier & Transparent Factor
-        has_real_reviews = bool(
-            review_data.get('trustpilot_rating')
-            or review_data.get('store_embedded_rating')
-            or review_data.get('snippets_found', 0) > 0
-        )
+        review_confidence = float(review_data.get('review_confidence') or 0)
+        has_real_reviews = review_confidence > 0
         if review_data['sentiment'] == 'HIGH_RISK':
             risk_multiplier *= 0.40  # Hard 60% penalty if verified non-delivery scam reports
-            review_factor_score = 20
+            review_factor_score = round(50 - (30 * review_confidence))
         elif review_data['sentiment'] == 'MIXED':
-            risk_multiplier *= 0.80
-            review_factor_score = 65
+            risk_multiplier *= 1.0 - (0.20 * review_confidence)
+            review_factor_score = round(50 + (15 * review_confidence))
         elif review_data['sentiment'] == 'POSITIVE':
-            risk_multiplier *= 1.10
-            review_factor_score = 95
+            # Positive reviews should only move the score in proportion to
+            # independent evidence quality and review volume.
+            risk_multiplier *= 1.0 + (0.10 * review_confidence)
+            review_factor_score = round(50 + (45 * review_confidence))
         elif has_real_reviews:
-            review_factor_score = 75
+            review_factor_score = round(50 + (20 * review_confidence))
         else:
             review_factor_score = None  # Zero fake percentage: Store is unreviewed
 
@@ -1061,6 +1116,7 @@ class StoreTrustAgent:
             'domain_age': int(domain_score * 100),
             'gateways': int(gateway_score * 100) if gateway_score is not None else None,
             'review_factor': review_factor_score,
+            'review_confidence': round(review_confidence * 100),
             'platform_integrity': int(final_trust_score * 100)
         }
 
