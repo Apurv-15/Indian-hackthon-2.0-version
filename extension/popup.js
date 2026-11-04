@@ -65,6 +65,9 @@ function buildReviewSection(reviewSummary) {
     }
 
     const reviewText = reviewSummary.summary || '';
+    const evidenceText = typeof reviewSummary.review_confidence === 'number'
+        ? `<div style="margin-top: 4px; color: var(--subtext); font-size: 10px;">Evidence confidence: ${Math.round(reviewSummary.review_confidence * 100)}% (${reviewSummary.evidence_sources_checked || 0} source${reviewSummary.evidence_sources_checked === 1 ? '' : 's'} checked)</div>`
+        : '';
     const reviewColor =
         reviewSummary.sentiment === 'HIGH_RISK'
             ? 'var(--high)'
@@ -79,7 +82,7 @@ function buildReviewSection(reviewSummary) {
             <div style="margin-top: 8px; padding-top: 6px; border-top: 1px solid rgba(255,255,255,0.08); font-size: 10px;">
                 <span style="color: var(--subtext);">Review Sources: </span>
                 <div style="display: flex; gap: 8px; margin-top: 5px; flex-wrap: wrap;">
-                    ${links.map(source => `<a href="${escapeHtml(source.url)}" target="_blank" rel="noopener noreferrer" style="color: #38bdf8; text-decoration: underline;">${escapeHtml(source.name)}</a>`).join('')}
+                    ${links.map(source => `<a href="${escapeHtml(source.url)}" target="_blank" rel="noopener noreferrer" style="color: #38bdf8; text-decoration: underline;">${escapeHtml(source.name)}${source.checked ? ' ✓' : ' (not checked)'}</a>`).join('')}
                 </div>
             </div>
         `
@@ -110,6 +113,7 @@ function buildReviewSection(reviewSummary) {
         <div style="font-size: 11px; background: rgba(255,255,255,0.03); padding: 8px; border-radius: 6px; margin-bottom: 8px;">
             <strong style="color: ${reviewColor}">${escapeHtml(reviewSummary.rating_label || 'Analyzed')}</strong>
             <div style="color: #e2e8f0; margin-top: 3px; line-height: 1.4;">${escapeHtml(reviewText)}</div>
+            ${evidenceText}
             ${takeawaysHtml}
             ${snippetsHtml}
             ${linksHtml}
@@ -143,8 +147,8 @@ document.getElementById('check-store').addEventListener('click', async () => {
 
         const color = TRUST_COLORS[data.trust_level] || 'var(--subtext)';
         const label = TRUST_LABELS[data.trust_level] || data.trust_level;
-        const reasons = (data.reasons || []).map(r => `<li>${r}</li>`).join('');
-        const recs = (data.recommendations || []).map(r => `<li>${r}</li>`).join('');
+        const reasons = (data.reasons || []).map(r => `<li>${escapeHtml(r)}</li>`).join('');
+        const recs = (data.recommendations || []).map(r => `<li>${escapeHtml(r)}</li>`).join('');
 
         const entityBadge = escapeHtml(data.business_entity || (data.gstin_valid ? 'GSTIN Verified' : 'Standard Store'));
         const paymentBadges = (data.payment_gateways && data.payment_gateways.length) ? data.payment_gateways.join(', ') : (data.signals?.has_upi_only ? '<span style="color: var(--high)">⚠️ UPI Only</span>' : 'Standard');
