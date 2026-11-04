@@ -24,19 +24,20 @@ tooltip.id = "aegis-tooltip";
 tooltip.style.cssText = `
   position: absolute;
   z-index: 999999;
-  background: rgba(10, 15, 30, 0.95);
-  color: #fff;
-  padding: 12px 16px;
-  border-radius: 12px;
-  font-family: 'Inter', system-ui, -apple-system, sans-serif;
-  font-size: 13px;
-  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
-  backdrop-filter: blur(8px);
-  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: rgba(13, 17, 28, 0.96);
+  color: #f1f5f9;
+  padding: 14px 16px;
+  border-radius: 14px;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+  font-size: 12.5px;
+  box-shadow: 0 12px 36px rgba(0, 0, 0, 0.65), 0 0 0 1px rgba(255, 255, 255, 0.12);
+  backdrop-filter: blur(12px);
   display: none;
   pointer-events: none;
-  max-width: 300px;
-  line-height: 1.5;
+  max-width: 340px;
+  min-width: 270px;
+  line-height: 1.45;
+  box-sizing: border-box;
 `;
 if (document.body) {
   document.body.appendChild(tooltip);
@@ -64,24 +65,113 @@ function resolveTargetUrl(target) {
     return rawHref;
 }
 
+// Function to format individual reason with contextual icon
+function formatReasonIcon(reasonText) {
+    const text = String(reasonText || "").toLowerCase();
+    if (text.includes("impersonat") || text.includes("mimic") || text.includes("spoof") || text.includes("similar to a legitimate")) {
+        return "🎭";
+    }
+    if (text.includes("divergence") || text.includes("says one thing") || text.includes("points somewhere")) {
+        return "🔀";
+    }
+    if (text.includes("keyword") || text.includes("credential") || text.includes("signin") || text.includes("login") || text.includes("verify")) {
+        return "🎣";
+    }
+    if (text.includes("unreachable") || text.includes("dead") || text.includes("sinkhole")) {
+        return "🔌";
+    }
+    if (text.includes("tld") || text.includes("subdomain") || text.includes("ip address")) {
+        return "🌐";
+    }
+    if (text.includes("prompt injection") || text.includes("override") || text.includes("jailbreak")) {
+        return "🛡️";
+    }
+    if (text.includes("urgency") || text.includes("pressure") || text.includes("aggressive")) {
+        return "⏳";
+    }
+    return "⚠️";
+}
+
 // Function to update tooltip content
 function updateTooltip(x, y, data) {
   if (data.error) {
-    tooltip.innerHTML = `<span style="color: #ff4d4d">Error: ${data.error}</span>`;
+    tooltip.innerHTML = `<span style="color: #ff4d4d; font-weight: 600;">⚠️ ${data.error}</span>`;
   } else {
+    const isSafe = data.riskLevel === "Safe";
+    const isHighOrCritical = data.riskLevel === "High" || data.riskLevel === "Critical";
+    const riskColor = RISK_COLORS[data.riskLevel] || '#94a3b8';
+    
+    // Fallback parsing for reasons if array or string
+    let reasons = [];
+    if (Array.isArray(data.humanReasons) && data.humanReasons.length > 0) {
+        reasons = data.humanReasons;
+    } else if (Array.isArray(data.indicators) && data.indicators.length > 0) {
+        reasons = data.indicators.map(r => {
+            let clean = String(r || "");
+            ["URL Analysis (ML): ", "URL Analysis: ", "Content Analysis: ", "Sender Spoofing: ", "Behavioral Threat: ", "Prompt Injection Agent: ", "Prompt Injection: ", "Hidden Threat: "].forEach(p => {
+                if (clean.startsWith(p)) clean = clean.slice(p.length);
+            });
+            return clean.split(" — helper:")[0].trim();
+        });
+    } else if (typeof data.explanation === 'string' && data.explanation.length > 0) {
+        reasons = [data.explanation];
+    }
+
+    // Human-understandable 1-sentence summary
+    const summary = data.summary || (isSafe ? "Verified safe: No threat patterns detected." : `${data.threatType || 'Suspicious'} threat detected.`);
+    const actionAdvice = data.actionAdvice || (isSafe ? "Safe to proceed." : (isHighOrCritical ? "Do not click or enter your credentials." : "Proceed with caution."));
+
+    // Render clean reasons list
+    const reasonsHtml = reasons.slice(0, 3).map(r => {
+        const icon = formatReasonIcon(r);
+        return `
+          <div style="display: flex; gap: 7px; align-items: flex-start; margin-bottom: 5px; font-size: 11.5px; color: #cbd5e1; line-height: 1.4;">
+            <span style="font-size: 12px; line-height: 1.2;">${icon}</span>
+            <span style="flex: 1;">${r}</span>
+          </div>
+        `;
+    }).join("");
+
     tooltip.innerHTML = `
-      <div style="font-weight: bold; margin-bottom: 4px; display: flex; justify-content: space-between; align-items: center;">
-        <span>AegisAI Analysis</span>
-        <span style="color: ${RISK_COLORS[data.riskLevel] || '#fff'}; font-size: 11px; padding: 2px 6px; border-radius: 4px; background: rgba(0,0,0,0.3);">${data.riskLevel} Risk</span>
+      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; border-bottom: 1px solid rgba(255,255,255,0.08); padding-bottom: 6px;">
+        <span style="font-size: 11.5px; font-weight: 700; letter-spacing: 0.5px; color: #94a3b8; text-transform: uppercase;">🛡️ AegisAI Shield</span>
+        <span style="color: ${riskColor}; font-size: 11px; font-weight: 700; padding: 2px 8px; border-radius: 12px; background: rgba(0,0,0,0.4); border: 1px solid ${riskColor}40;">
+          ${data.riskLevel} Risk
+        </span>
       </div>
-      <div><strong>Verdict:</strong> ${escapeHtml(data.threatType || 'Unknown')}</div>
-      ${data.riskLevel === 'Safe' 
-        ? `<div><strong>Safety Score:</strong> <span style="color:#00e676; font-weight:600;">${data.safetyScore != null ? data.safetyScore : 99}%</span> <span style="font-size:10px; color:#888;">(Confidence: ${data.confidenceScore}%)</span></div>`
-        : `<div><strong>Threat Confidence:</strong> <span style="color:#ff5252; font-weight:600;">${data.confidenceScore}%</span></div>`
-      }
-      <div style="margin-top: 6px; font-size: 11px; color: #ccc;">${escapeHtml(data.explanation || 'No explanation available.')}</div>
+
+      <div style="margin-bottom: 8px;">
+        <div style="font-weight: 700; font-size: 13.5px; color: #f8fafc; margin-bottom: 3px;">
+          ${data.threatType && data.threatType !== 'Unknown' ? data.threatType : (isSafe ? 'Safe Link' : 'Potential Threat')}
+        </div>
+        <div style="font-size: 11.5px; color: #94a3b8;">
+          ${isSafe 
+            ? `Safety Score: <strong style="color: #4ade80;">${data.safetyScore != null ? data.safetyScore : 99}%</strong> <span style="font-size:10px; color:#64748b;">(Confidence: ${data.confidenceScore}%)</span>`
+            : `Threat Confidence: <strong style="color: ${riskColor};">${data.confidenceScore}%</strong>`
+          }
+        </div>
+      </div>
+
+      <!-- Human Summary Banner -->
+      <div style="background: rgba(255, 255, 255, 0.05); border-left: 3px solid ${riskColor}; padding: 7px 9px; border-radius: 4px; margin-bottom: 9px; font-size: 11.5px; color: #e2e8f0; font-weight: 500;">
+        ${summary}
+      </div>
+
+      <!-- Reasons / Signals -->
+      ${reasons.length > 0 ? `
+        <div style="margin-bottom: 8px;">
+          <div style="font-size: 10.5px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.4px; color: #64748b; margin-bottom: 4px;">Key Signals</div>
+          ${reasonsHtml}
+        </div>
+      ` : ''}
+
+      <!-- Action Guidance Pill -->
+      <div style="margin-top: 6px; padding: 6px 9px; border-radius: 6px; font-size: 11px; font-weight: 600; display: flex; align-items: center; gap: 6px; background: ${isSafe ? 'rgba(34, 197, 94, 0.12)' : (isHighOrCritical ? 'rgba(239, 68, 68, 0.15)' : 'rgba(234, 179, 8, 0.15)')}; color: ${isSafe ? '#4ade80' : (isHighOrCritical ? '#fca5a5' : '#fde047')};">
+        <span>${isSafe ? '✅' : (isHighOrCritical ? '🛑' : '⚠️')}</span>
+        <span>${actionAdvice}</span>
+      </div>
     `;
-    tooltip.style.borderTop = `3px solid ${RISK_COLORS[data.riskLevel] || 'transparent'}`;
+    tooltip.style.borderTop = `3px solid ${riskColor}`;
   }
   tooltip.style.display = "block";
   tooltip.style.left = x + 15 + "px";
@@ -385,9 +475,23 @@ function injectStoreTrustBadge() {
                     </div>
 
                     <div class="aegis-card-section-title">Business Verification</div>
-                    <div class="aegis-metric-pill">
-                        <span style="color: #374151; font-weight: 600;">Business Entity</span>
-                        <strong style="color: #111827; font-weight: 700; text-align: right; max-width: 185px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" title="${escapeHtml(data.business_entity || (data.gstin_valid ? 'GSTIN Verified' : 'Standard Store'))}">${escapeHtml(data.business_entity || (data.gstin_valid ? 'GSTIN Verified' : 'Standard Store'))}</strong>
+                    <div class="aegis-metric-pill" style="flex-direction: column; align-items: stretch; gap: 4px;">
+                        <div style="display: flex; justify-content: space-between; align-items: center; width: 100%;">
+                            <span style="color: #374151; font-weight: 600;">Business Entity</span>
+                            <div style="display: flex; align-items: center; gap: 4px;">
+                                <span id="aegis-entity-text" style="color: #111827; font-weight: 700; text-align: right; max-width: 175px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; transition: all 0.2s ease;">
+                                    ${escapeHtml(data.business_entity || (data.gstin_valid ? 'GSTIN Verified' : 'Standard Store'))}
+                                </span>
+                                ${(data.business_entity && data.business_entity.length > 22) ? `
+                                    <button id="aegis-entity-toggle-btn" class="aegis-no-scan" style="background: none; border: none; padding: 0 2px; cursor: pointer; color: #4b5563; font-size: 11px; display: inline-flex; align-items: center; font-weight: 700;" title="Click to view full entity name">
+                                        <span id="aegis-entity-arrow" style="display: inline-block; transition: transform 0.2s ease;">▼</span>
+                                    </button>
+                                ` : ''}
+                            </div>
+                        </div>
+                        <div id="aegis-entity-full" style="display: none; font-size: 11px; color: #1e293b; background: rgba(0,0,0,0.04); padding: 5px 8px; border-radius: 6px; margin-top: 2px; word-break: break-word; line-height: 1.35; border-left: 2px solid #b8a994;">
+                            ${escapeHtml(data.business_entity || '')}
+                        </div>
                     </div>
 
                     <div class="aegis-metric-pill">
@@ -447,6 +551,20 @@ function injectStoreTrustBadge() {
             const card = document.getElementById('aegis-trust-card');
             const expandReviewsBtn = document.getElementById('aegis-expand-reviews-btn');
             const detailedSnippets = document.getElementById('aegis-detailed-snippets');
+            const entityToggleBtn = document.getElementById('aegis-entity-toggle-btn');
+            const entityFull = document.getElementById('aegis-entity-full');
+            const entityArrow = document.getElementById('aegis-entity-arrow');
+
+            if (entityToggleBtn && entityFull) {
+                entityToggleBtn.addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    const isExpanded = entityFull.style.display === 'block';
+                    entityFull.style.display = isExpanded ? 'none' : 'block';
+                    if (entityArrow) {
+                        entityArrow.style.transform = isExpanded ? 'rotate(0deg)' : 'rotate(180deg)';
+                    }
+                });
+            }
             
             toggleBtn.addEventListener('click', (e) => {
                 e.stopPropagation();
