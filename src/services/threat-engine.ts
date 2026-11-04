@@ -3,6 +3,9 @@ export interface ThreatAnalysisResult {
   threatType: string;
   confidenceScore: number;
   explanation: string;
+  summary?: string;
+  humanReasons?: string[];
+  actionAdvice?: string;
   indicators: string[];
   recommendations: string[];
   detailedScores?: {

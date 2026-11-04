@@ -274,22 +274,70 @@ export default function Home() {
                     </div>
 
                     {/* Threat Type & Explanation */}
-                    <div className="md:col-span-2 bg-white shadow-[0_8px_30px_rgb(0,0,0,0.04)] border border-white/50 rounded-[2.5rem] p-8 flex flex-col">
-                      <div className="flex items-start justify-between mb-4">
-                        <div>
-                          <h4 className="text-sm font-medium text-slate-500 uppercase tracking-wider">Threat Classification</h4>
-                          <p className="text-xl font-semibold text-slate-800 mt-1">{result.threatType}</p>
+                    <div className="md:col-span-2 bg-white shadow-[0_8px_30px_rgb(0,0,0,0.04)] border border-white/50 rounded-[2.5rem] p-8 flex flex-col justify-between">
+                      <div>
+                        <div className="flex items-start justify-between mb-4">
+                          <div>
+                            <h4 className="text-sm font-medium text-slate-500 uppercase tracking-wider">Threat Classification</h4>
+                            <p className="text-xl font-bold text-slate-800 mt-1">{result.threatType}</p>
+                          </div>
+                          <div className={`px-3 py-1.5 rounded-full text-xs font-bold border flex items-center gap-1.5 ${getRiskBg(result.riskLevel)} ${getRiskColor(result.riskLevel)}`}>
+                            <span>{result.riskLevel === 'Safe' ? '🛡️' : '⚠️'}</span>
+                            <span>{result.riskLevel} Risk</span>
+                          </div>
                         </div>
-                        <div className="p-2 bg-slate-50 border border-slate-100 rounded-xl">
-                          <Info className="w-5 h-5 text-[var(--color-primary)]" />
+
+                        {/* Human Summary Callout Banner */}
+                        <div className={`p-4 rounded-2xl mb-4 border-l-4 font-medium text-sm leading-relaxed ${
+                          result.riskLevel === 'Safe' 
+                            ? 'bg-emerald-50/70 border-emerald-500 text-emerald-900' 
+                            : result.riskLevel === 'High' || result.riskLevel === 'Critical'
+                            ? 'bg-red-50/70 border-red-500 text-red-900'
+                            : 'bg-amber-50/70 border-amber-500 text-amber-900'
+                        }`}>
+                          <p>{result.summary || result.explanation}</p>
                         </div>
+
+                        {/* Humanized Signals List */}
+                        {((result.humanReasons && result.humanReasons.length > 0) || (result.indicators && result.indicators.length > 0)) && (
+                          <div className="space-y-2 mt-3">
+                            <h4 className="text-xs font-bold text-slate-400 uppercase tracking-wider">Key Signals & Evidence</h4>
+                            <div className="space-y-2">
+                              {(result.humanReasons && result.humanReasons.length > 0 ? result.humanReasons : result.indicators.slice(0, 3)).map((reason, idx) => {
+                                const cleanReason = reason
+                                  .replace(/^(URL Analysis \(ML\)|URL Analysis|Content Analysis|Sender Spoofing|Behavioral Threat|Prompt Injection Agent|Prompt Injection|Hidden Threat):\s*/i, '')
+                                  .split(' — helper:')[0]
+                                  .trim();
+                                
+                                const icon = cleanReason.toLowerCase().includes('impersonat') || cleanReason.toLowerCase().includes('mimic') ? '🎭'
+                                  : cleanReason.toLowerCase().includes('divergence') || cleanReason.toLowerCase().includes('points somewhere') ? '🔀'
+                                  : cleanReason.toLowerCase().includes('keyword') || cleanReason.toLowerCase().includes('signin') || cleanReason.toLowerCase().includes('login') ? '🎣'
+                                  : cleanReason.toLowerCase().includes('prompt') || cleanReason.toLowerCase().includes('override') ? '🛡️'
+                                  : cleanReason.toLowerCase().includes('unreachable') || cleanReason.toLowerCase().includes('dns') ? '🔌'
+                                  : result.riskLevel === 'Safe' ? '✅' : '⚠️';
+
+                                return (
+                                  <div key={idx} className="flex items-start gap-2.5 text-sm text-slate-600 bg-slate-50/80 p-2.5 rounded-xl border border-slate-100">
+                                    <span className="text-base shrink-0 leading-tight">{icon}</span>
+                                    <span className="leading-snug">{cleanReason}</span>
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          </div>
+                        )}
                       </div>
-                      
-                      <div className="flex-1">
-                        <h4 className="text-sm font-medium text-slate-500 uppercase tracking-wider mb-2">Explainable Reasoning</h4>
-                        <p className="text-slate-600 leading-relaxed text-sm">
-                          {result.explanation}
-                        </p>
+
+                      {/* Action Advice Footer */}
+                      <div className={`mt-4 px-4 py-2.5 rounded-xl text-xs font-semibold flex items-center gap-2 ${
+                        result.riskLevel === 'Safe'
+                          ? 'bg-emerald-100/60 text-emerald-800'
+                          : result.riskLevel === 'High' || result.riskLevel === 'Critical'
+                          ? 'bg-red-100/60 text-red-800'
+                          : 'bg-amber-100/60 text-amber-800'
+                      }`}>
+                        <span>{result.riskLevel === 'Safe' ? '✅' : '🛑'}</span>
+                        <span>{result.actionAdvice || (result.riskLevel === 'Safe' ? 'Verified safe to proceed.' : 'Exercise caution and verify before taking action.')}</span>
                       </div>
                     </div>
                   </div>
@@ -356,12 +404,18 @@ export default function Home() {
                         Key Indicators
                       </h4>
                       <ul className="space-y-3">
-                        {result.indicators.map((indicator, idx) => (
-                          <li key={idx} className="flex items-start gap-3 text-sm text-slate-600">
-                            <ChevronRight className="w-4 h-4 text-[var(--color-primary)] shrink-0 mt-0.5" />
-                            <span>{indicator}</span>
-                          </li>
-                        ))}
+                        {result.indicators.map((indicator, idx) => {
+                          const cleanIndicator = indicator
+                            .replace(/^(URL Analysis \(ML\)|URL Analysis|Content Analysis|Sender Spoofing|Behavioral Threat|Prompt Injection Agent|Prompt Injection|Hidden Threat):\s*/i, '')
+                            .split(' — helper:')[0]
+                            .trim();
+                          return (
+                            <li key={idx} className="flex items-start gap-3 text-sm text-slate-600">
+                              <ChevronRight className="w-4 h-4 text-[var(--color-primary)] shrink-0 mt-0.5" />
+                              <span>{cleanIndicator}</span>
+                            </li>
+                          );
+                        })}
                       </ul>
                     </div>
 
